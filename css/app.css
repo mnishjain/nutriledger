@@ -34,7 +34,8 @@ button { cursor: pointer; }
 .topbar h1 { font-size: 30px; line-height: 1.1; margin: 0; letter-spacing: -0.02em; flex: 1; }
 .date-nav { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; }
 .date-nav h1 { flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.date-btn { background: none; border: 0; padding: 0; text-align: left; color: inherit; min-width: 0; }
+.date-btn { position: relative; display: block; background: none; border: 0; padding: 0; text-align: left; color: inherit; min-width: 0; overflow: hidden; cursor: pointer; }
+.date-btn input.date-overlay { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; opacity: 0.011; font-size: 16px; -webkit-appearance: none; appearance: none; cursor: pointer; }
 .icon-btn { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 20px; border: 0; background: transparent; color: var(--ink-2); flex: none; }
 .icon-btn:active { background: var(--fill); }
 .avatar { width: 38px; height: 38px; border-radius: 19px; border: 0; background: var(--ink); color: var(--paper); font-weight: 700; font-size: 14px; flex: none; }
@@ -156,7 +157,7 @@ input.warn { border-color: var(--turmeric); background: var(--turmeric-soft); }
 .source-line { font-size: 13px; color: var(--ink-3); margin: 6px 0 12px; }
 
 /* Tab bar */
-.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: center; background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: center; background: var(--card); background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
 .tabbar nav { display: grid; grid-template-columns: repeat(5, 1fr); width: 100%; max-width: 640px; height: var(--tab-h); }
 .tabbar button { border: 0; background: none; display: grid; justify-items: center; align-content: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--ink-3); }
 .tabbar button.on { color: var(--ink); }

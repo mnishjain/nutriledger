@@ -117,12 +117,21 @@ function openWeight() {
   draw();
 }
 
-async function shareFile(text, filename, type) {
+export async function shareFile(text, filename, type) {
   const blob = new Blob([text], { type });
   const file = typeof File !== 'undefined' ? new File([blob], filename, { type }) : null;
   try {
     if (file && navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: filename }); return 'shared'; }
-  } catch (e) { if (e.name === 'AbortError') return 'cancelled'; }
+  } catch (e) {
+    if (e.name === 'AbortError') return 'cancelled';
+    // iOS only allows the share sheet directly from a tap; offer a one-tap button with the file ready
+    if (e.name === 'NotAllowedError') return new Promise((resolve) => {
+      const s = openSheet({ title: 'Your file is ready', onClose: () => resolve('cancelled') });
+      s.body.append(h('p', {}, filename), h('button.btn.primary.block', { type: 'button', onclick: async () => {
+        try { await navigator.share({ files: [file], title: filename }); s.close(); resolve('shared'); } catch (err) { if (err.name === 'AbortError') { s.close(); resolve('cancelled'); } else toast(err.message, { tone: 'error' }); }
+      } }, icon('share', 18), 'Share / Save to Files'));
+    });
+  }
   const a = h('a', { href: URL.createObjectURL(blob), download: filename }); document.body.appendChild(a); a.click(); a.remove();
   return 'downloaded';
 }

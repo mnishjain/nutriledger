@@ -60,6 +60,10 @@ const CLEAN = {
     if (!d || !idOk(d.profileId) || !isDateStr(d.date)) return null;
     return { id: `${d.profileId}|${d.date}`, profileId: d.profileId, date: d.date, complete: !!d.complete, note: str(d.note, 300), updatedAt: numOr(d.updatedAt, Date.now()) };
   },
+  stats(t) {
+    if (!t || !idOk(t.id) || !idOk(t.profileId) || !idOk(t.foodId)) return null;
+    return { id: t.id, profileId: t.profileId, foodId: t.foodId, count: Math.max(0, Math.round(numOr(t.count, 0))), lastUsed: numOr(t.lastUsed, 0), lastPortion: numOr(t.lastPortion, 0), lastPortionLabel: str(t.lastPortionLabel, 80), lastQty: numOr(t.lastQty, null), lastFat: numOr(t.lastFat, null), updatedAt: numOr(t.updatedAt, 0) };
+  },
   portions(p) {
     if (!p || !idOk(p.id)) return null;
     return { id: p.id, list: cleanPortions(p.list) };
@@ -75,7 +79,7 @@ export function validateBackup(obj) {
   try {
     if (isLegacyShape(obj)) {
       const m = mapLegacy(obj);
-      const data = { profiles: m.profiles, foods: m.foods, meals: m.meals, entries: m.entries, weights: m.weights, days: [], portions: [] };
+      const data = { profiles: m.profiles, foods: m.foods, meals: m.meals, entries: m.entries, weights: m.weights, days: [], stats: [], portions: [] };
       return finish(data, 'legacy-v2', m.activeProfileId, m.report);
     }
     if (!obj || obj.format !== FORMAT || !obj.data || typeof obj.data !== 'object') return { ok: false, error: 'This file is not a NutriLedger backup.' };
@@ -89,7 +93,7 @@ export function validateBackup(obj) {
     }
     if (!data.profiles.length) return { ok: false, error: 'Backup contains no profiles.' };
     const pids = new Set(data.profiles.map((p) => p.id));
-    for (const s of ['meals', 'entries', 'weights', 'days']) {
+    for (const s of ['meals', 'entries', 'weights', 'days', 'stats']) {
       const before = data[s].length; data[s] = data[s].filter((r) => pids.has(r.profileId)); rejected[s] += before - data[s].length;
     }
     const active = pids.has(obj.activeProfileId) ? obj.activeProfileId : data.profiles[0].id;

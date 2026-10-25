@@ -491,6 +491,33 @@ test('UPGRADE PATH: real v2 production app (with its service worker) → v3 keep
   } finally { SERVE_ROOT = ROOT; SW_SUFFIX = ''; await ctx.close().catch(() => {}); }
 });
 
+test('date title is a real tappable date control (iOS native picker)', async () => {
+  const { ctx, page } = await newCtx(); await open(page); await setupProfile(page);
+  await page.waitForTimeout(300);
+  const [box, title] = await page.evaluate(() => ['.date-overlay', '#day-title'].map((q) => { const r = document.querySelector(q).getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }));
+  assert(box.width >= title.width - 1 && box.height >= 30, 'overlay covers the title');
+  const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.className, { x: title.x + title.width / 2, y: title.y + title.height / 2 });
+  eq(hit, 'date-overlay', 'a tap on the title lands on the date input');
+  await page.fill('.date-overlay', '2026-10-01'); await page.waitForTimeout(300);
+  eq(await appEval(page, () => window.__nl.date), '2026-10-01', 'date changed');
+  await ctx.close();
+});
+
+test('production and beta offline workers coexist without serving each other', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nl-pb-'));
+  const { ctx, page } = await newCtx({ userDataDir: dir, sw: true });
+  await open(page); await setupProfile(page, 'Prod'); await addFood(page, 'banana');
+  for (let i = 0; i < 30 && !(await page.evaluate(() => !!navigator.serviceWorker.controller)); i++) await page.waitForTimeout(500);
+  await open(page, `${BASE}beta/`);
+  eq(await appEval(page, () => window.__nl.isBeta), true, 'beta page is the beta build');
+  eq(await appEval(page, () => window.__nl.dbName), 'nutriledger-beta', 'beta database');
+  await page.locator('.sheet.open [aria-label=Close]').click().catch(() => {});
+  await open(page, BASE);
+  eq(await appEval(page, () => window.__nl.isBeta), false, 'production page is production');
+  eq((await dayEntries(page)).length, 1, 'production data untouched');
+  await ctx.close();
+});
+
 // ---------------------------------------------------------------- runner
 let failed = 0;
 for (const t of tests.filter((x) => x.name.includes(FILTER))) {

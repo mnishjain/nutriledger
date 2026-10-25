@@ -19,12 +19,12 @@ export async function renderToday(root) {
   clear(root);
 
   // Header with date navigation
-  const dateInput = h('input', { type: 'date', value: date, class: 'visually-hidden', 'aria-label': 'Choose date', onchange: (e) => { if (e.target.value) { setDate(e.target.value); refresh('date'); } } });
+  const dateInput = h('input', { type: 'date', value: date, class: 'date-overlay', 'aria-label': 'Choose date', onchange: (e) => { if (e.target.value) { setDate(e.target.value); refresh('date'); } } });
   root.append(h('header.topbar', {},
     h('div.date-nav', {},
       h('button.icon-btn', { type: 'button', 'aria-label': 'Previous day', onclick: () => { setDate(addDays(date, -1)); refresh('date'); } }, icon('back')),
-      h('button.date-btn', { type: 'button', onclick: () => (dateInput.showPicker ? dateInput.showPicker() : dateInput.click()) }, h('h1', { id: 'day-title' }, prettyDate(date, today))),
-      h('button.icon-btn', { type: 'button', 'aria-label': 'Next day', onclick: () => { setDate(addDays(date, 1)); refresh('date'); } }, icon('fwd')), dateInput),
+      h('label.date-btn', {}, h('h1', { id: 'day-title' }, prettyDate(date, today)), dateInput),
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Next day', onclick: () => { setDate(addDays(date, 1)); refresh('date'); } }, icon('fwd'))),
     h('button.avatar', { type: 'button', 'aria-label': `Profile ${app.profile.name}. Switch profile`, onclick: () => { app.tab = 'more'; refresh('tab'); } }, initials(app.profile.name))));
   if (date !== today) root.append(h('div', { style: { margin: '-4px 0 8px' } }, h('button.pill.warn', { type: 'button', id: 'back-to-today', onclick: () => { setDate(today); refresh('date'); } }, `Viewing ${prettyDate(date, today)} · back to today`)));
 

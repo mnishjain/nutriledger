@@ -25,7 +25,9 @@ self.addEventListener('message', (e) => { if (e.data === 'skipWaiting') self.ski
 self.addEventListener('fetch', (e) => {
   const req = e.request; const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
-  const isNav = req.mode === 'navigate';
+  const scope = new URL(self.registration.scope).pathname;
+  if (!scope.endsWith('/beta/') && url.pathname.startsWith(scope + 'beta/')) return; // beta has its own worker
+  const isNav = req.mode === 'navigate' && (url.pathname === scope || url.pathname === scope + 'index.html');
   e.respondWith((async () => {
     const shell = await caches.open(SHELL);
     const hit = await shell.match(isNav ? './index.html' : req, { ignoreSearch: true });
@@ -38,7 +40,7 @@ self.addEventListener('fetch', (e) => {
       if (res.ok && url.pathname.includes('/js/vendor/')) rt.put(req, res.clone());
       return res;
     } catch (err) {
-      if (isNav) { const idx = await shell.match('./index.html'); if (idx) return idx; }
+      if (req.mode === 'navigate') { const idx = await shell.match('./index.html'); if (idx) return idx; }
       throw err;
     }
   })());

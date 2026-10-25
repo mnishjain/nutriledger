@@ -51,11 +51,14 @@ export async function loadPersonal() {
   rebuildIndex();
 }
 
+let coreIndex = null; let usdaIndexCache = null;
 export function rebuildIndex() {
   const mealFoods = app.meals.map((m) => ({ id: `meal:${m.id}`, kind: 'meal', name: m.name, aliases: [], group: 'Saved meal', src: 'meal', diet: 'veg', meal: m }));
-  app.index = [...mealFoods, ...app.userFoods, ...coreLibrary()].map(indexFood);
+  coreIndex ||= coreLibrary().map(indexFood); // built-in foods never change at runtime: index once
+  app.index = [...[...mealFoods, ...app.userFoods].map(indexFood), ...coreIndex];
   const u = usdaLoaded();
-  app.usdaIndex = u ? u.map(indexFood) : null;
+  if (u && !usdaIndexCache) usdaIndexCache = u.map(indexFood);
+  app.usdaIndex = usdaIndexCache;
 }
 
 export function dietOk(f) { return f.kind === 'meal' || f.userFood || dietAllows(app.profile?.diet || 'veg', f.diet); }

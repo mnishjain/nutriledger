@@ -20,4 +20,7 @@ Read this first if you are a new session / another AI picking up the work.
 - Owner's real backup is NOT committed (public repo). Kept outside repo at /home/claude/private/real-backup-2026-10-25.json for local tests only. Committed fixture is anonymised with the same structure (incl. duplicate-ID bug).
 
 ## Status log
-- 2026-10-25: Phase 1 audit done (docs/AUDIT.md). Branch created. Build in progress.
+- 2026-10-25: Phase 1 audit done (docs/AUDIT.md). Branch created.
+- 2026-10-25: v3 built on branch `rebuild-v3`. 59 unit + 24 browser tests pass (docs/TEST_RESULTS.md), incl. upgrade from the real v2 production app.
+- BLOCKER: push to GitHub refused (Claude GitHub App not installed on mnishjain/nutriledger). Nothing is on GitHub yet; production untouched.
+- NEXT: once push works → push `rebuild-v3`, open PR, publish `/beta/` on main via tools/make-beta.mjs, owner runs docs/IPHONE_ACCEPTANCE.md, then promote on approval.
