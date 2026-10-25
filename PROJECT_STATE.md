@@ -24,4 +24,8 @@ Read this first if you are a new session / another AI picking up the work.
 - 2026-10-25: v3 built on branch `rebuild-v3`. 59 unit + 24 browser tests pass (docs/TEST_RESULTS.md), incl. upgrade from the real v2 production app.
 - 2026-10-25 21:55 IST: GitHub access fixed by owner. Pushed `rebuild-v3`; PR #1 opened (https://github.com/mnishjain/nutriledger/pull/1).
 - 2026-10-25: `/beta/` published on main (commit e190e63) via tools/make-beta.mjs. Live root files unchanged (still v2). Smoke-tested v2 root + v3 beta side by side.
-- NEXT: owner runs docs/IPHONE_ACCEPTANCE.md on https://mnishjain.github.io/nutriledger/beta/ and reports. On approval: copy site files from rebuild-v3 to main root, regenerate sw.js, delete /beta/, push; v2 Home Screen app auto-migrates on next open (tested in e2e UPGRADE PATH).
+- 2026-10-25 22:47 IST: owner APPROVED beta. Reported "Add to Home Screen" not appearing (iOS 26 hides Share behind ••• in compact tab layout) and asked about bookmarking; asked for nutrition-from-picture (web screenshots).
+- 2026-10-25: added Picture/text input (camera, photo library/screenshot, pasted text), web-format parser (US FDA, Google card, compact cards), multi-read OCR correction (3 image widths, calorie checksum, physical rules), beta→live one-time data copy, iOS 26 Home Screen tip, backup reminder every 3 days in a Safari tab. 71 unit + 28 browser tests pass.
+- 2026-10-25: PROMOTED v3 to main root (merge of rebuild-v3). /beta/ retired: redirect page + self-unregistering worker; live app copies IndexedDB "nutriledger-beta" once. Simulated real switch (old main → new main): beta bookmark lands on live app, 1 profile, all entries kept.
+- Note: GitHub Pages lets browsers reuse pages for up to 10 minutes, so right after a deploy the old version can show briefly.
+- NEXT: owner uses live app; watch for Safari-specific issues; consider cloud backup only if owner asks.

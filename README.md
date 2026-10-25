@@ -3,10 +3,10 @@
 Offline-first iPhone nutrition tracker for Indian vegetarian meals. Runs as a Home Screen web app from GitHub Pages. No account, no server, no paid AI, no running cost.
 
 - **Live app:** https://mnishjain.github.io/nutriledger/ (after v3 is promoted)
-- **Beta:** https://mnishjain.github.io/nutriledger/beta/ (separate data)
+- **Beta:** retired 25 Oct 2026 (redirects to the live app; beta data is copied in automatically)
 
 ## What it does
-- One search box over your foods, saved meals, 78 Indian dishes, ~560 IFCT 2017 Indian ingredients and ~5,900 USDA foods; packaged foods via Open Food Facts; barcode and nutrition-label photo (on-device OCR); quick add; custom foods.
+- One search box over your foods, saved meals, 78 Indian dishes, ~560 IFCT 2017 Indian ingredients and ~5,900 USDA foods; packaged foods via Open Food Facts; barcode; nutrition from a picture (camera, photo/screenshot from any website, or pasted text) read on-device with multi-read cross-checking; quick add; custom foods.
 - Indian portions without weighing: chapati sizes, katori sizes, paratha, ghee/oil per serving, nut counts and handfuls, custom portion sizes.
 - 16 nutrients, with unknown kept as unknown (never zero) and coverage shown.
 - Personal targets (ICMR-NIN 2020, WHO, Morton 2018), daily dashboard, 7/14/21/30-day trends with five distinct warning types.
