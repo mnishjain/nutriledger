@@ -110,3 +110,21 @@ test('OFF search filters irrelevant products and survives API failure', async ()
   assert.match(nf.error, /not in Open Food Facts/);
   assert.match((await lookupBarcode('12')).error, /barcode/);
 });
+
+test('label parse: energy checksum repairs dropped decimals and flags them', () => {
+  const r = parseLabel('Per 100 g\nEnergy 520 kcal\nProtein 8.5 g\nCarbohydrate 60.2 g\nTotal Fat 270 g\nSaturated Fat 120 g\nSodium 650 mg');
+  assert.equal(r.per100.fat, 27); assert.equal(r.per100.satfat, 12);
+  assert.ok(r.suspicious.includes('fat')); assert.ok(r.warnings.some((w) => /decimal point/.test(w)));
+  const ok = parseLabel('Per 100 g\nEnergy 520 kcal\nProtein 8.5 g\nCarbohydrate 60.2 g\nTotal Fat 27.0 g');
+  assert.equal(ok.per100.fat, 27); assert.ok(!ok.suspicious.includes('fat'));
+  const g = parseLabel('Per 100 g\nEnergy 520 kcal\nDietary Fibre 2.1¢\nTotal Fat 27.0¢');
+  assert.equal(g.per100.fibre, 2.1); assert.equal(g.per100.fat, 27);
+});
+
+test('label parse: a whole number among decimal values is flagged (lost decimal point)', () => {
+  const r = parseLabel('Per 100 g\nEnergy 520 kcal\nProtein 8.5 g\nCarbohydrate 60.2 g\nTotal Sugars 50 g\nTotal Fat 27.0 g\nSaturated Fat 12.0 g');
+  assert.ok(r.suspicious.includes('sugar'));
+  assert.ok(!r.suspicious.includes('protein'));
+  const plain = parseLabel('Per 100 g\nEnergy 360 kcal\nProtein 12 g\nCarbohydrate 70 g\nTotal Fat 4 g');
+  assert.equal(plain.suspicious.length, 0, 'labels that use whole numbers throughout are not flagged');
+});

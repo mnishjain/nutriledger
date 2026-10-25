@@ -1,1 +1,16 @@
-{"name":"NutriLedger","short_name":"NutriLedger","start_url":"./","display":"standalone","background_color":"#f5f8f5","theme_color":"#183c36","icons":[]}
+{
+  "name": "NutriLedger",
+  "short_name": "NutriLedger",
+  "description": "Offline nutrition tracker for Indian vegetarian meals",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f6f5",
+  "theme_color": "#f3f6f5",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

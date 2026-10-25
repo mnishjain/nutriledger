@@ -36,6 +36,7 @@ export function cleanOcr(text) {
     .replace(/(?<=\s|^)[oO](?=\.\d)/g, '0')
     .replace(/(?<=\d)\s+\.(?=\d)/g, '.')
     .replace(/[|]/g, ' ')
+    .replace(/(\d)\s?[¢§]/g, '$1 g') // OCR reads "g" as ¢ or §
     .replace(/µg|μg|mcg/gi, 'ug');
 }
 
@@ -98,7 +99,7 @@ export function parseLabel(text) {
       if (want === 'mg' && unit === 'g') v *= 1000;
       if (want === 'mg' && unit === 'ug') v /= 1000;
       if (want === 'g' && unit === 'mg') v /= 1000;
-      fields[key] = { value: v, raw: line, basis };
+      fields[key] = { value: v, raw: line, basis, tok: pick.raw.trim() };
     }
   }
   // Convert per-serving to per-100 g when that is the only column
@@ -116,8 +117,33 @@ export function parseLabel(text) {
   const suspicious = [];
   for (const [k, v] of Object.entries(per100)) {
     if (MAX[k] && v > MAX[k]) suspicious.push(k);
-    // "12g" misread as "129": a 3-digit gram value ending in 9 where the line contains no 'g' after it
   }
+  // Formatting consistency: Indian labels print grams with one decimal ("5.0 g"). If most gram values on this
+  // label have a decimal point and one does not, its decimal point was probably lost in OCR.
+  const gramKeys = ['protein', 'carbs', 'sugar', 'fibre', 'fat', 'satfat'].filter((k) => fields[k]?.tok);
+  const withDec = gramKeys.filter((k) => /\d\.\d/.test(fields[k].tok));
+  if (withDec.length >= 3) for (const k of gramKeys) if (!withDec.includes(k) && per100[k] >= 10) suspicious.push(k);
+  // Energy checksum: the label's own calories should match 4·protein + 4·carbs + 9·fat (±15%).
+  // If not, try the most common OCR error (a dropped decimal point, i.e. value ×10) on each macro.
+  const corrections = [];
+  if ([per100.kcal, per100.protein, per100.carbs, per100.fat].every(isNum) && per100.kcal > 40) {
+    const err = (p, c, f) => Math.abs(4 * p + 4 * c + 9 * f - per100.kcal) / per100.kcal;
+    if (err(per100.protein, per100.carbs, per100.fat) > 0.15) {
+      let best = null;
+      for (const dp of [1, 10]) for (const dc of [1, 10]) for (const df of [1, 10]) {
+        if (dp === 1 && dc === 1 && df === 1) continue;
+        const e = err(per100.protein / dp, per100.carbs / dc, per100.fat / df);
+        if (!best || e < best.e) best = { e, dp, dc, df };
+      }
+      if (best && best.e < 0.08) {
+        for (const [k, d] of [['protein', best.dp], ['carbs', best.dc], ['fat', best.df]]) if (d === 10) { corrections.push(`${k} ${per100[k]} → ${per100[k] / 10}`); per100[k] = per100[k] / 10; suspicious.push(k); }
+        if (isNum(per100.satfat) && per100.satfat > per100.fat && per100.satfat / 10 <= per100.fat) { corrections.push(`saturated fat ${per100.satfat} → ${per100.satfat / 10}`); per100.satfat /= 10; suspicious.push('satfat'); }
+      } else suspicious.push('kcal');
+    }
+  }
+  if (corrections.length) warnings.push(`A decimal point seemed to be missing, so these were corrected using the label's calories: ${corrections.join(', ')}. Please check.`);
+  // Gram values with two or more decimals are unusual on Indian labels (often a misread "g")
+  for (const k of ['protein', 'carbs', 'fat', 'satfat', 'fibre', 'sugar']) if (isNum(per100[k]) && /\.\d{2,}/.test(String(fields[k]?.value ?? '')) && per100[k] >= 1) suspicious.push(k);
   if (isNum(per100.satfat) && isNum(per100.fat) && per100.satfat > per100.fat) suspicious.push('satfat');
   if (isNum(per100.sugar) && isNum(per100.carbs) && per100.sugar > per100.carbs) suspicious.push('sugar');
   if (suspicious.length) warnings.push(`Check these carefully – they look misread: ${[...new Set(suspicious)].join(', ')}`);
