@@ -1,0 +1,365 @@
+{
+ "profiles": [
+  {
+   "id": "p1",
+   "name": "Test User",
+   "age": 40,
+   "sex": "male",
+   "height": 170,
+   "weight": 70,
+   "calorieGoal": 1800,
+   "proteinGoal": 120
+  }
+ ],
+ "active": "p1",
+ "foods": [
+  {
+   "id": "f0",
+   "name": "Chapati",
+   "k": 300,
+   "p": 10,
+   "unit": "piece",
+   "grams": 35
+  },
+  {
+   "id": "f1",
+   "name": "Ghee",
+   "k": 900,
+   "p": 0,
+   "unit": "teaspoon",
+   "grams": 5
+  },
+  {
+   "id": "f2",
+   "name": "Cooked rice",
+   "k": 130,
+   "p": 2.7,
+   "unit": "small bowl",
+   "grams": 100
+  },
+  {
+   "id": "f3",
+   "name": "Dal cooked",
+   "k": 115,
+   "p": 6.5,
+   "unit": "small bowl",
+   "grams": 120
+  },
+  {
+   "id": "f4",
+   "name": "Sabzi mixed",
+   "k": 85,
+   "p": 2,
+   "unit": "small bowl",
+   "grams": 100
+  },
+  {
+   "id": "f5",
+   "name": "Curd",
+   "k": 65,
+   "p": 3.7,
+   "unit": "small bowl",
+   "grams": 100
+  },
+  {
+   "id": "f6",
+   "name": "Roasted chana",
+   "k": 380,
+   "p": 20,
+   "unit": "small bowl",
+   "grams": 50
+  },
+  {
+   "id": "f7",
+   "name": "Peanuts",
+   "k": 570,
+   "p": 25,
+   "unit": "small handful",
+   "grams": 20
+  },
+  {
+   "id": "f8",
+   "name": "Whey protein",
+   "k": 400,
+   "p": 80,
+   "unit": "scoop",
+   "grams": 30
+  },
+  {
+   "id": "f9",
+   "name": "Toned milk",
+   "k": 52,
+   "p": 3.2,
+   "unit": "glass",
+   "grams": 250
+  },
+  {
+   "id": "f10",
+   "name": "High-protein Greek yogurt",
+   "k": 70,
+   "p": 10,
+   "unit": "tub",
+   "grams": 200
+  },
+  {
+   "id": "f11",
+   "name": "Tofu firm",
+   "k": 110,
+   "p": 12,
+   "unit": "portion",
+   "grams": 100
+  },
+  {
+   "id": "f12",
+   "name": "Low-fat paneer",
+   "k": 160,
+   "p": 20,
+   "unit": "portion",
+   "grams": 100
+  },
+  {
+   "id": "f13",
+   "name": "Moong sprouts cooked",
+   "k": 65,
+   "p": 5,
+   "unit": "small bowl",
+   "grams": 100
+  },
+  {
+   "id": "f14",
+   "name": "Aloo paratha",
+   "k": 250,
+   "p": 6,
+   "unit": "piece",
+   "grams": 120
+  },
+  {
+   "id": "f15",
+   "name": "Apple",
+   "k": 52,
+   "p": 0.3,
+   "unit": "piece",
+   "grams": 180
+  },
+  {
+   "id": "f16",
+   "name": "Banana",
+   "k": 89,
+   "p": 1.1,
+   "unit": "piece",
+   "grams": 110
+  },
+  {
+   "id": "f17",
+   "name": "Orange",
+   "k": 47,
+   "p": 0.9,
+   "unit": "piece",
+   "grams": 140
+  },
+  {
+   "id": "f18",
+   "name": "Tea no sugar with milk",
+   "k": 25,
+   "p": 1,
+   "unit": "cup",
+   "grams": 120
+  },
+  {
+   "id": "f19",
+   "name": "Rajma cooked",
+   "k": 120,
+   "p": 7.5,
+   "unit": "small bowl",
+   "grams": 120
+  },
+  {
+   "id": "f20",
+   "name": "Cucumber",
+   "k": 15,
+   "p": 0.7,
+   "unit": "small bowl",
+   "grams": 100
+  },
+  {
+   "id": "f21",
+   "name": "Potato boiled",
+   "k": 87,
+   "p": 2,
+   "unit": "small bowl",
+   "grams": 100
+  },
+  {
+   "id": "f22",
+   "name": "Quinoa cooked",
+   "k": 120,
+   "p": 4.4,
+   "unit": "small bowl",
+   "grams": 100
+  },
+  {
+   "id": "f23",
+   "name": "Carrot",
+   "k": 41,
+   "p": 0.9,
+   "unit": "small bowl",
+   "grams": 100
+  },
+  {
+   "id": "f24",
+   "name": "Makhana",
+   "k": 347,
+   "p": 9.7,
+   "unit": "small bowl",
+   "grams": 25
+  },
+  {
+   "id": "f25",
+   "name": "Cashew nuts (kaju)",
+   "k": 553,
+   "p": 18.2,
+   "unit": "small handful",
+   "grams": 20
+  },
+  {
+   "id": "f26",
+   "name": "Almonds (badam)",
+   "k": 579,
+   "p": 21.2,
+   "unit": "small handful",
+   "grams": 20
+  },
+  {
+   "id": "f27",
+   "name": "Pistachios (pista)",
+   "k": 562,
+   "p": 20.2,
+   "unit": "small handful",
+   "grams": 20
+  },
+  {
+   "id": "f28",
+   "name": "Sweet potato",
+   "k": 86,
+   "p": 1.6,
+   "unit": "small bowl",
+   "grams": 120
+  },
+  {
+   "id": "f25",
+   "name": "Walnuts (akhrot)",
+   "k": 654,
+   "p": 15.2,
+   "unit": "small handful",
+   "grams": 20
+  },
+  {
+   "id": "f26",
+   "name": "Mushrooms",
+   "k": 22,
+   "p": 3.1,
+   "unit": "small bowl",
+   "grams": 100
+  },
+  {
+   "id": "f27",
+   "name": "Spinach cooked",
+   "k": 23,
+   "p": 2.9,
+   "unit": "small bowl",
+   "grams": 100
+  },
+  {
+   "id": "1792900000111-custom",
+   "name": "Homemade kadhi",
+   "k": 120,
+   "p": 4,
+   "grams": 150,
+   "unit": "small bowl",
+   "sodium": 300,
+   "fiber": 1.3
+  }
+ ],
+ "meals": [
+  {
+   "id": "m1",
+   "pid": "p1",
+   "name": "Chana peanuts",
+   "items": [
+    {
+     "name": "Roasted chana (50g)",
+     "k": 190,
+     "p": 10
+    },
+    {
+     "name": "Peanuts (20g)",
+     "k": 114,
+     "p": 5
+    }
+   ],
+   "k": 304,
+   "p": 15
+  }
+ ],
+ "entries": [
+  {
+   "id": "1792900000000-anon0",
+   "pid": "p1",
+   "date": "2026-10-20",
+   "name": "Whey protein (60g)",
+   "k": 240,
+   "p": 48,
+   "slot": "Snack"
+  },
+  {
+   "id": "1792900000001-anon1",
+   "pid": "p1",
+   "date": "2026-10-20",
+   "name": "Tea no sugar with milk (120g)",
+   "k": 30,
+   "p": 1.2,
+   "slot": "Snack"
+  },
+  {
+   "id": "1792900000002-anon2",
+   "pid": "p1",
+   "date": "2026-10-20",
+   "name": "Cashew nuts (kaju) (15g)",
+   "k": 83,
+   "p": 2.7,
+   "slot": "Snack"
+  },
+  {
+   "id": "1792900000003-anon3",
+   "pid": "p1",
+   "date": "2026-10-20",
+   "name": "Cashew nuts (kaju) (15g)",
+   "k": 83,
+   "p": 2.7,
+   "slot": "Snack"
+  },
+  {
+   "id": "1792900000999-anonx",
+   "pid": "p1",
+   "date": "2026-10-21",
+   "name": "Custom kadhi (150g)",
+   "k": 180,
+   "p": 6,
+   "slot": "Lunch",
+   "sodium": 450,
+   "fiber": 2
+  }
+ ],
+ "weights": [
+  {
+   "pid": "p1",
+   "date": "2026-10-19",
+   "kg": 70.4
+  },
+  {
+   "pid": "p1",
+   "date": "2026-10-19",
+   "kg": 70.2
+  }
+ ]
+}

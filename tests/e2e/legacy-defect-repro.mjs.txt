@@ -1,0 +1,38 @@
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+const base='http://127.0.0.1:8765/';
+const browser = await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1243/chrome-linux64/chrome'});
+const ctx = await browser.newContext({viewport:{width:390,height:844}});
+const page = await ctx.newPage();
+page.on('dialog', d=>d.accept());
+const db = () => page.evaluate(()=>JSON.parse(localStorage.getItem('nl_mj_v2')||'null'));
+const nav = n => page.click(`[data-nav="${n}"]`);
+const R = {};
+await page.goto(base);
+// --- Defect 1: date carried silently from Diary into Add food
+const y = await page.evaluate(()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10)});
+await page.fill('#selectedDate', y); await page.dispatchEvent('#selectedDate','change');
+await nav('Add food'); await page.selectOption('#food',{label:'Chapati'}); await page.click('#addfood');
+await page.reload(); 
+R.d1_entry_date = (await db()).entries[0].date; R.d1_yesterday = y;
+R.d1_items_visible_on_today_after_reopen = await page.locator('[data-remove]').count();
+// --- Defect 2: custom food with blank calories saved as 0 kcal
+await nav('Add food'); await page.fill('#newname','Test blank kcal'); await page.fill('#newp','5'); await page.fill('#newsodium','400');
+await page.click('#newfood');
+R.d2_blank_calorie_food = (await db()).foods.find(f=>f.name==='Test blank kcal');
+// --- Defect 3: saved meal drops all micronutrients
+await nav('Saved meals'); await page.selectOption('#ingredient',{label:'Test blank kcal'}); await page.click('#addIng');
+await page.fill('#title','Combo'); await page.click('#saveCombo');
+await page.click('[data-log]');
+const e = (await db()).entries.find(x=>x.name.startsWith('Combo'));
+R.d3_meal_entry = e; 
+// --- Defect 4: corrupt storage -> silent reset, original overwritten on next save
+await page.evaluate(()=>localStorage.setItem('nl_mj_v2', localStorage.getItem('nl_mj_v2').slice(0,-5)));
+await page.reload(); await nav('Add food'); await page.click('#addfood');
+const after = await db();
+R.d4_entries_after_corruption_and_one_save = after.entries.length;
+// --- Defect 5: profile calorie goal blank -> 0 -> NaN/Infinity bars
+await nav('Profiles'); await page.fill('[data-field="calorieGoal"]',''); await page.click('#saveProfile');
+await nav('Diary'); R.d5_bar_style = await page.locator('.fill').first().getAttribute('style');
+R.d5_goal_saved = (await db()).profiles[0].calorieGoal;
+console.log(JSON.stringify(R,null,1));
+await browser.close();
