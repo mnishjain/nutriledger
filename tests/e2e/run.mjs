@@ -346,7 +346,9 @@ test('label photo: on-device OCR reads a nutrition panel and asks for confirmati
     <tr><td>Dietary Fibre</td><td>2.1 g</td></tr><tr><td>Total Fat</td><td>27.0 g</td></tr><tr><td>Saturated Fat</td><td>12.0 g</td></tr><tr><td>Sodium</td><td>650 mg</td></tr></table></div>`);
   await lp.screenshot({ path: `${OUT}/label.png` }); await lp.close();
   await page.click('#tab-add');
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator('.sheet.open .quick-actions button', { hasText: 'Label photo' }).click()]);
+  await page.locator('.sheet.open #qa-picture').click();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator('.sheet.open #src-camera').click()]);
+  eq(await chooser.element().getAttribute('capture'), 'environment', 'camera option opens the camera');
   await chooser.setFiles(`${OUT}/label.png`);
   await page.waitForSelector('#food-save', { timeout: 120000 }).catch(async (e) => { throw new Error(`OCR did not finish — sheet says: ${await page.locator('.sheet.open').last().textContent()} — errors: ${page.errors.join(' | ')}`); });
   const s = page.locator('.sheet.open').last();
@@ -354,9 +356,7 @@ test('label photo: on-device OCR reads a nutrition panel and asks for confirmati
   await page.screenshot({ path: `${OUT}/label-confirm.png` });
   eq(vals['Calories (kcal)'], '520', 'kcal'); eq(vals['Protein (g)'], '8.5', 'protein'); eq(vals['Total fat (g)'], '27', 'fat'); eq(vals['Sodium (mg)'], '650', 'sodium');
   eq(vals['Carbohydrates (g)'], '60.2', 'carbs'); eq(vals['Saturated fat (g)'], '12', 'satfat'); eq(vals['Fibre (g)'], '2.1', 'fibre');
-  // Sugar "5.0 g" is misread by OCR in this image; the app must flag it rather than accept it silently
-  if (vals['Total sugar (g)'] !== '5') assert(await s.getByLabel('Total sugar (g)').evaluate((e) => e.classList.contains('warn')), `misread sugar ${vals['Total sugar (g)']} must be highlighted`);
-  await s.getByLabel('Total sugar (g)').fill('5');
+  eq(vals['Total sugar (g)'], '5', 'sugar (OCR misreads corrected by combining reads)');
   await s.getByLabel('Name', { exact: true }).fill('Test biscuits');
   await s.locator('#food-save').click();
   await page.waitForSelector('.sheet.open #add-to-diary');
@@ -515,6 +515,83 @@ test('production and beta offline workers coexist without serving each other', a
   await open(page, BASE);
   eq(await appEval(page, () => window.__nl.isBeta), false, 'production page is production');
   eq((await dayEntries(page)).length, 1, 'production data untouched');
+  await ctx.close();
+});
+
+async function renderShot(html, file, { width = 390, dark = false } = {}) {
+  const lp = await browser.newPage({ viewport: { width, height: 700 }, deviceScaleFactor: 3 });
+  await lp.setContent(`<body style="margin:0;background:${dark ? '#000' : '#fff'};color:${dark ? '#fff' : '#202124'};font:16px -apple-system,Arial,sans-serif">${html}</body>`);
+  await lp.screenshot({ path: file, fullPage: true }); await lp.close();
+}
+async function pictureFromLibrary(page, file) {
+  await page.click('#tab-add');
+  await page.locator('.sheet.open #qa-picture').click();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator('.sheet.open #src-library').click()]);
+  eq(await chooser.element().getAttribute('capture'), null, 'library option does not force the camera');
+  await chooser.setFiles(file);
+  await page.waitForSelector('#food-save', { timeout: 120000 });
+  const s = page.locator('.sheet.open').last();
+  const v = {}; for (const [k, l] of Object.entries({ kcal: 'Calories (kcal)', protein: 'Protein (g)', carbs: 'Carbohydrates (g)', fat: 'Total fat (g)', fibre: 'Fibre (g)', sodium: 'Sodium (mg)', potassium: 'Potassium (mg)' })) v[k] = Number(await s.getByLabel(l).inputValue() || NaN);
+  return { s, v };
+}
+
+test('screenshot from Photos: Google-style nutrition card (per 100 g) is read correctly', async () => {
+  const { ctx, page } = await newCtx(); await open(page); await setupProfile(page);
+  const row = (a, b, c = '') => `<div style="display:flex;justify-content:space-between;border-top:1px solid #dadce0;padding:9px 0"><span>${a}</span><span><b>${b}</b>&nbsp;&nbsp;&nbsp;${c}</span></div>`;
+  await renderShot(`<div style="padding:16px"><div style="font-size:22px">Banana</div><div style="font-size:13px;color:#70757a">Nutrition Facts</div><div style="margin-top:10px">Amount Per 100 grams</div>
+    <div style="font-size:24px;font-weight:600;margin:6px 0">Calories 89</div><div style="text-align:right;font-size:13px">% Daily Value*</div>
+    ${row('Total Fat', '0.3 g', '0%')}${row('Sodium', '1 mg', '0%')}${row('Potassium', '358 mg', '10%')}${row('Total Carbohydrate', '23 g', '7%')}${row('Dietary fiber', '2.6 g', '10%')}${row('Sugar', '12 g', '')}${row('Protein', '1.1 g', '2%')}
+    ${row('Vitamin C', '14%', '')}${row('Iron', '1%', '')}${row('Vitamin B6', '20%', '')}</div>`, `${OUT}/shot-google.png`);
+  const { s, v } = await pictureFromLibrary(page, `${OUT}/shot-google.png`);
+  await page.screenshot({ path: `${OUT}/shot-google-confirm.png` });
+  eq(v.kcal, 89, 'kcal'); eq(v.protein, 1.1, 'protein'); eq(v.carbs, 23, 'carbs'); eq(v.fat, 0.3, 'fat'); eq(v.sodium, 1, 'sodium'); eq(v.potassium, 358, 'potassium');
+  assert(Number.isNaN(Number(await s.getByLabel('Iron (mg)').inputValue() || NaN)), 'iron % is not invented as mg');
+  await s.getByLabel('Name', { exact: true }).fill('Banana (Google)'); await s.locator('#food-save').click();
+  await page.waitForSelector('.sheet.open #add-to-diary');
+  eq(await appEval(page, () => window.__nl.userFoods[0].conf), 'user', 'web-sourced values marked as your entry');
+  await ctx.close();
+});
+
+test('screenshot from Photos: dark-mode US Nutrition Facts panel per serving → per 100 g', async () => {
+  const { ctx, page } = await newCtx(); await open(page); await setupProfile(page);
+  const r = (a, b, bold = false) => `<div style="display:flex;justify-content:space-between;border-top:1px solid #888;padding:5px 0;${bold ? 'font-weight:700' : ''}"><span>${a}</span><span>${b}</span></div>`;
+  await renderShot(`<div style="margin:14px;padding:10px;border:2px solid #fff;font:17px Helvetica,Arial"><div style="font-size:30px;font-weight:900">Nutrition Facts</div><div>8 servings per container</div>
+    <div style="font-weight:700;border-bottom:8px solid #fff;padding-bottom:4px">Serving size 2/3 cup (55g)</div><div style="font-weight:700">Amount per serving</div>
+    <div style="font-size:28px;font-weight:900;border-bottom:4px solid #fff">Calories 230</div>${r('Total Fat 8g', '10%', true)}${r('Saturated Fat 1g', '5%')}${r('Sodium 160mg', '7%', true)}
+    ${r('Total Carbohydrate 37g', '13%', true)}${r('Dietary Fiber 4g', '14%')}${r('Total Sugars 12g', '')}${r('Protein 3g', '', true)}${r('Potassium 240mg', '6%')}</div>`, `${OUT}/shot-us-dark.png`, { dark: true });
+  const { v } = await pictureFromLibrary(page, `${OUT}/shot-us-dark.png`);
+  await page.screenshot({ path: `${OUT}/shot-us-dark-confirm.png` });
+  near(v.kcal, 418.18, 0.02, 'kcal per 100 g'); near(v.fat, 14.55, 0.02, 'fat'); near(v.carbs, 67.27, 0.02, 'carbs'); near(v.protein, 5.45, 0.02, 'protein'); near(v.sodium, 290.91, 0.02, 'sodium'); near(v.fibre, 7.27, 0.02, 'fibre');
+  const portion = await page.locator('.sheet.open').last().locator('.prow input').first().inputValue();
+  eq(portion, '1 serving', 'serving portion offered');
+  await ctx.close();
+});
+
+test('paste nutrition text from a web page', async () => {
+  const { ctx, page } = await newCtx(); await open(page); await setupProfile(page);
+  await page.click('#tab-add'); await page.locator('.sheet.open #qa-picture').click(); await page.locator('.sheet.open #src-paste').click();
+  await page.fill('#paste-text', fs.readFileSync(path.join(ROOT, 'tests/fixtures/labels/compact-web.txt'), 'utf8'));
+  await page.click('#paste-read'); await page.waitForSelector('#food-save');
+  const s = page.locator('.sheet.open').last();
+  eq(await s.getByLabel('Calories (kcal)').inputValue(), '532', 'kcal'); eq(await s.getByLabel('Total fat (g)').inputValue(), '34', 'fat');
+  eq(await s.getByLabel('Carbohydrates (g)').inputValue(), '38', 'carbs'); eq(await s.getByLabel('Protein (g)').inputValue(), '22', 'protein'); eq(await s.getByLabel('Sodium (mg)').inputValue(), '820', 'sodium');
+  // nonsense text is rejected, nothing invented
+  await s.locator('[aria-label=Close]').click();
+  await page.click('#tab-add').catch(() => {}); await page.locator('.sheet.open #qa-picture').last().click(); await page.locator('.sheet.open #src-paste').last().click();
+  await page.fill('#paste-text', 'Great taste! Buy now, 20% off.'); await page.click('#paste-read');
+  assert((await page.locator('.sheet.open').last().textContent()).includes('Could not find nutrition values'), 'rejected');
+  await ctx.close();
+});
+
+test('beta data is copied into the live app once, without duplicating the person', async () => {
+  const { ctx, page } = await newCtx();
+  await open(page, `${BASE}beta/`); await setupProfile(page, 'Manish'); await addFood(page, 'paneer'); await addFood(page, 'roti');
+  await open(page, BASE);
+  await page.waitForSelector('#kcal-left');
+  eq(await appEval(page, () => window.__nl.profiles.length), 1, 'one profile');
+  eq((await dayEntries(page)).length, 2, 'beta entries present in live app');
+  await page.reload(); await page.waitForFunction(() => window.__nlReady);
+  eq((await dayEntries(page)).length, 2, 'not copied twice');
   await ctx.close();
 });
 

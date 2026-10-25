@@ -192,6 +192,48 @@ export class Store {
   }
 }
 
+/**
+ * One-time copy of data from another NutriLedger database on this origin (used to bring beta data into
+ * the live app). Profiles are matched by name; with one profile on each side they are treated as the same
+ * person and the newer profile settings win. Never modifies or deletes the source database.
+ */
+export async function importFromSiblingDb(target, sourceName, { idb = globalThis.indexedDB } = {}) {
+  const done = await target.meta(`siblingImport:${sourceName}`);
+  if (done) return done;
+  let names = null;
+  try { names = idb.databases ? (await idb.databases()).map((d) => d.name) : null; } catch { names = null; }
+  if (!names || !names.includes(sourceName)) { const r = { status: 'none', at: Date.now() }; await target.setMeta(`siblingImport:${sourceName}`, r); return r; }
+  const src = await openDB(sourceName, { idb });
+  let r;
+  try {
+    const exp = await src.exportAll();
+    const v = validateBackup(exp);
+    if (!v.ok || !v.data.entries.length) r = { status: 'empty', at: Date.now() };
+    else {
+      const mine = await target.all('profiles');
+      const map = new Map();
+      for (const p of v.data.profiles) {
+        const same = mine.find((m) => m.id === p.id) || mine.find((m) => m.name.trim().toLowerCase() === p.name.trim().toLowerCase())
+          || (mine.length === 1 && v.data.profiles.length === 1 ? mine[0] : null);
+        if (same) map.set(p.id, same.id);
+      }
+      for (const p of v.data.profiles) if (map.has(p.id)) { const t = mine.find((m) => m.id === map.get(p.id)); Object.assign(p, { ...p, id: t.id, createdAt: t.createdAt, updatedAt: Math.max(p.updatedAt || 0, (t.updatedAt || 0) + 1) }); }
+      for (const st of ['meals', 'entries', 'weights', 'days', 'stats']) for (const rec of v.data[st]) if (map.has(rec.profileId)) {
+        const np = map.get(rec.profileId);
+        if (st === 'days') rec.id = `${np}|${rec.date}`;
+        if (st === 'stats') rec.id = `${np}|${rec.foodId}`;
+        if (st === 'weights' && rec.id.startsWith('w-')) rec.id = `w-${np}|${rec.date}`;
+        rec.profileId = np;
+      }
+      if (map.has(v.activeProfileId)) v.activeProfileId = map.get(v.activeProfileId);
+      await target.importValidated(v, 'merge');
+      r = { status: 'imported', at: Date.now(), counts: v.counts };
+    }
+  } finally { src.db.close(); }
+  await target.setMeta(`siblingImport:${sourceName}`, r);
+  return r;
+}
+
 /** Ask the browser not to evict our storage. Returns 'granted' | 'denied' | 'unsupported'. */
 export async function requestPersistence(nav = globalThis.navigator) {
   try {

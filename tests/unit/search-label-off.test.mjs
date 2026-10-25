@@ -128,3 +128,66 @@ test('label parse: a whole number among decimal values is flagged (lost decimal 
   const plain = parseLabel('Per 100 g\nEnergy 360 kcal\nProtein 12 g\nCarbohydrate 70 g\nTotal Fat 4 g');
   assert.equal(plain.suspicious.length, 0, 'labels that use whole numbers throughout are not flagged');
 });
+
+// Real-world formats users screenshot from the web (fixtures in tests/fixtures/labels/)
+import fsLab from 'node:fs';
+const lab = (f) => parseLabel(fsLab.readFileSync(new URL(`../fixtures/labels/${f}`, import.meta.url), 'utf8'));
+const r1 = (v) => Math.round(v * 10) / 10;
+
+test('web formats: US FDA panel per serving "2/3 cup (55g)" → per 100 g', () => {
+  const r = lab('us-fda-panel.txt');
+  assert.equal(r.basis, 'perServing'); assert.equal(r.servingG, 55);
+  assert.deepEqual([r1(r.per100.kcal), r1(r.per100.fat), r1(r.per100.carbs), r1(r.per100.protein), r1(r.per100.sodium), r1(r.per100.fibre)], [418.2, 14.5, 67.3, 5.5, 290.9, 7.3]);
+  assert.equal(r.suspicious.length, 0);
+});
+test('web formats: old US panel ignores "Calories from Fat"', () => {
+  const r = lab('old-us-panel.txt');
+  assert.equal(r.servingG, 228); assert.equal(r1(r.per100.kcal), 109.6); assert.equal(r1(r.per100.fat), 5.3);
+});
+test('web formats: Google nutrition card per 100 g; "Vitamin B6" never read as iron', () => {
+  const r = lab('google-card.txt');
+  assert.equal(r.basis, 'per100');
+  assert.deepEqual([r.per100.kcal, r.per100.protein, r.per100.carbs, r.per100.fat, r.per100.potassium, r.per100.sodium], [89, 1.1, 23, 0.3, 358, 1]);
+  assert.equal(r.per100.iron, undefined);
+  assert.equal(r.suspicious.length, 0, 'mixed integer/decimal formatting is not flagged');
+});
+test('web formats: several values on one line are separated correctly', () => {
+  const r = lab('compact-web.txt');
+  assert.deepEqual([r.per100.kcal, r.per100.fat, r.per100.carbs, r.per100.protein, r.per100.satfat, r.per100.sodium, r.per100.fibre, r.per100.sugar], [532, 34, 38, 22, 15, 820, 6, 2]);
+});
+
+// Real Tesseract outputs (3 image widths) captured from the app's own OCR pipeline: tests/fixtures/ocr/
+import { combineReads, tokenCandidates, looksClean } from '../../js/core/labelparse.js';
+const ocr = (n) => [800, 1200, 2000].map((w) => fsLab.readFileSync(new URL(`../fixtures/ocr/${n}-w${w}.txt`, import.meta.url), 'utf8'));
+const pick = (r, ks) => ks.map((k) => r1(r.per100[k]));
+
+test('OCR token candidates: trailing-9 "g" and lost decimal points', () => {
+  assert.deepEqual(tokenCandidates('239g').map((c) => c.v).sort((a, b) => a - b), [2.3, 23, 23.9, 239]);
+  assert.ok(tokenCandidates('119').some((c) => c.v === 1.1));
+  assert.ok(tokenCandidates('270g').some((c) => c.v === 27));
+  assert.equal(tokenCandidates('8.5g')[0].v, 8.5);
+});
+test('OCR combine: Indian pack label read 3 ways → all values correct', () => {
+  const r = combineReads(ocr('label'));
+  assert.deepEqual(pick(r, ['kcal', 'protein', 'carbs', 'sugar', 'fibre', 'fat', 'satfat', 'sodium']), [520, 8.5, 60.2, 5, 2.1, 27, 12, 650]);
+  assert.ok(r.suspicious.length > 0, 'corrected values are highlighted for the user');
+  assert.equal(looksClean(combineReads([ocr('label')[1]])), false, 'a single messy read triggers more reads');
+});
+test('OCR combine: Google-style screenshot → all values correct, iron % not invented', () => {
+  const r = combineReads(ocr('shot-google'));
+  assert.deepEqual(pick(r, ['kcal', 'protein', 'carbs', 'fat', 'fibre', 'sugar', 'sodium', 'potassium']), [89, 1.1, 23, 0.3, 2.6, 12, 1, 358]);
+  assert.equal(r.per100.iron, undefined);
+});
+test('OCR combine: dark-mode US panel, "(559)" serving read as 55 g', () => {
+  const r = combineReads(ocr('shot-us-dark'));
+  assert.equal(r.servingG, 55);
+  assert.deepEqual(pick(r, ['kcal', 'fat', 'carbs', 'protein', 'sodium', 'fibre', 'sugar']), [418.2, 14.5, 67.3, 5.5, 290.9, 7.3, 21.8]);
+  assert.equal(r.suspicious.length, 0, 'clean read, nothing flagged');
+});
+test('OCR combine: Indian label where fibre exceeds carbs (chia) is not "corrected"', () => {
+  assert.equal(combineReads(['Per 100 g\nEnergy 486 kcal\nProtein 16.5 g\nCarbohydrate 8.0 g\nDietary Fibre 34.4 g\nTotal Fat 30.7 g']).per100.fibre, 34.4);
+});
+test('OCR combine: "27.09" (g read as 9) resolves to 27.0', () => {
+  const r = combineReads(['Per 100 g\nEnergy 520 kcal\nProtein 8.50\nCarbohydrate 60.2\nTotal Fat 27.09\nSaturated Fat 12.09']);
+  assert.equal(r.per100.fat, 27); assert.equal(r.per100.satfat, 12); assert.ok(r.suspicious.includes('fat'));
+});

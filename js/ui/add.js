@@ -9,7 +9,7 @@ import { NUTRIENTS, INFO, fmt, plausibility, sanitize, isNum } from '../core/nut
 import { SLOTS, prettyDate, localDate } from '../core/dates.js';
 import { searchProducts } from '../api/off.js';
 import { confBadge, sourceLine, kcal, g1, confExplain } from './common.js';
-import { scanBarcode, scanLabel } from './scan.js';
+import { scanBarcode, chooseLabelSource } from './scan.js';
 
 /**
  * ctx: { date, slot, mode: 'log' | 'pick', onPick(item) }
@@ -38,7 +38,7 @@ export function openAdd(ctx) {
 
   const actions = h('div.quick-actions', {},
     h('button', { type: 'button', onclick: () => scanBarcode(ctx) }, icon('barcode'), 'Barcode'),
-    h('button', { type: 'button', onclick: () => scanLabel(ctx) }, icon('camera'), 'Label photo'),
+    h('button', { type: 'button', id: 'qa-picture', onclick: () => chooseLabelSource(ctx) }, icon('camera'), 'Picture / text'),
     h('button', { type: 'button', onclick: () => openQuickAdd(ctx) }, icon('bolt'), 'Quick add'),
     h('button', { type: 'button', onclick: () => openFoodForm({ ctx, initial: { name: input.value.trim() } }) }, icon('edit'), 'New food'));
 
@@ -283,7 +283,7 @@ export function openQuickAdd(ctx, name = '') {
  * Create or edit a food (values per 100 g). Used for manual entry and label photos.
  * initial may include per100, name, brand, portions, suspicious[], basisNote.
  */
-export function openFoodForm({ ctx = null, initial = {}, onSaved = null, src = null, conf = null, warnings = [], photo = null } = {}) {
+export function openFoodForm({ ctx = null, initial = {}, onSaved = null, src = null, conf = null, warnings = [], photo = null, refText = null } = {}) {
   const editing = !!initial.userFood;
   const sheet = openSheet({ title: editing ? 'Edit food' : src === 'label' ? 'Check label values' : 'New food' });
   const b = sheet.body;
@@ -308,7 +308,7 @@ export function openFoodForm({ ctx = null, initial = {}, onSaved = null, src = n
 
   if (photo) b.append(h('img.photo-preview', { src: photo, alt: 'Your label photo' }));
   for (const w of warnings) b.append(h('div.banner', {}, w));
-  if (src === 'label') b.append(h('div.hint', { style: { marginBottom: '12px' } }, 'Values read from your photo. Compare every number with the label and correct anything wrong. Highlighted fields look misread. Blank = unknown.'));
+  if (src === 'label') b.append(h('div.hint', { style: { marginBottom: '12px' } }, 'Values read from your picture or text. Compare every number with the label and correct anything wrong. Highlighted fields look misread. Blank = unknown.'));
   b.append(field('Name', nm), field('Brand', brand),
     h('div.section-title', {}, 'Diet'), segmented([['veg', 'Vegetarian'], ['egg', 'Contains egg'], ['nonveg', 'Non-veg']], diet, (v) => { diet = v; }, { label: 'Diet' }),
     h('div.section-title', {}, 'Nutrition per 100 g (or 100 ml)'),
@@ -340,7 +340,7 @@ export function openFoodForm({ ctx = null, initial = {}, onSaved = null, src = n
     const now = Date.now();
     const rec = { ...stripRuntime(initial), id: editing ? initial.id : uid('u-'), name, brand: brand.value.trim(), aliases: initial.aliases || [], group: initial.group || (src === 'label' ? 'Packaged' : 'My foods'),
       src: src || initial.src || 'user', conf: conf || (editing ? (initial.conf === 'off' || initial.conf === 'off-doubtful' ? 'user' : initial.conf) : 'user'), diet, per100: n, portions, dp: 0,
-      barcode: initial.barcode || null, ref: src === 'label' ? 'Your label photo, confirmed by you' : (initial.ref || 'Entered by you'), userFood: true, createdAt: initial.createdAt || now, updatedAt: now };
+      barcode: initial.barcode || null, ref: refText || (src === 'label' ? 'Your label photo, checked by you' : (initial.ref || 'Entered by you')), userFood: true, createdAt: initial.createdAt || now, updatedAt: now };
     if (editing && rec.conf !== 'user') rec.conf = 'user';
     await app.store.put('foods', rec);
     await loadPersonal();

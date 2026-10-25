@@ -1,6 +1,6 @@
 import { h, icon, clear, toast, openSheet, $ } from './ui/dom.js';
 import { app, onRefresh, loadProfiles, loadPersonal, syncToday, refresh } from './ui/state.js';
-import { openDB, requestPersistence } from './store/db.js';
+import { openDB, requestPersistence, importFromSiblingDb } from './store/db.js';
 import { renderToday } from './ui/today.js';
 import { renderMeals } from './ui/meals.js';
 import { renderInsights } from './ui/insights.js';
@@ -32,16 +32,20 @@ async function banners() {
   const box = h('div', { id: 'banners' });
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  let dismissed = {}; try { dismissed = JSON.parse(sessionStorage.getItem('nl-dismissed') || '{}'); } catch { /* private mode */ }
-  const dismiss = (k) => { dismissed[k] = 1; try { sessionStorage.setItem('nl-dismissed', JSON.stringify(dismissed)); } catch { /* ignore */ } render(); };
-  if (ios && !standalone && !dismissed.safari) box.append(h('div.banner', { id: 'safari-banner' }, h('b', {}, 'Use NutriLedger from your Home Screen'),
-    'Data saved in this Safari tab is separate from the Home Screen app, and Safari can delete it if you don’t visit for 7 days. Tap Share → “Add to Home Screen”, then always open it from there.',
+  // Dismissals are remembered in the app database: Safari tab for 30 days, backup reminder for 1 day
+  const dismissed = (await app.store.meta('dismissed', {})) || {};
+  const isOff = (k, days) => dismissed[k] && Date.now() - dismissed[k] < days * 86400000;
+  const dismiss = async (k) => { dismissed[k] = Date.now(); await app.store.setMeta('dismissed', dismissed); render(); };
+  if (ios && !standalone && !isOff('safari', 30)) box.append(h('div.banner', { id: 'safari-banner' }, h('b', {}, 'Tip: add NutriLedger to your Home Screen'),
+    'In Safari tap ••• (bottom right) → Share → scroll down → “Add to Home Screen” → keep “Open as Web App” on → Add. Then open it from the new icon. ',
+    'Using a bookmark also works, but Safari may delete this site’s data if you don’t open it for 7 days, so back up often.',
     h('div.actions', {}, h('button.btn', { type: 'button', onclick: () => dismiss('safari') }, 'Got it'))));
   const last = await app.store.meta('lastBackupAt', null);
   const c = await app.store.counts();
   const first = await app.store.meta('firstUseAt', Date.now());
   const age = Date.now() - (last || first);
-  if (c.entries >= 5 && age > 7 * 86400000 && !dismissed.backup) box.append(h('div.banner', { id: 'backup-banner' }, h('b', {}, last ? `Last backup ${Math.floor(age / 86400000)} days ago` : 'You have not made a backup yet'),
+  const backupDays = ios && !standalone ? 3 : 7; // a Safari tab's data is at more risk than a Home Screen app's
+  if (c.entries >= 5 && age > backupDays * 86400000 && !isOff('backup', 1)) box.append(h('div.banner', { id: 'backup-banner' }, h('b', {}, last ? `Last backup ${Math.floor(age / 86400000)} days ago` : 'You have not made a backup yet'),
     'Your diary is stored only on this phone. Export a copy to iCloud Drive.',
     h('div.actions', {}, h('button.btn.primary', { type: 'button', onclick: async () => { const r = await exportBackup(); if (r !== 'cancelled') render(); } }, 'Back up now'), h('button.btn', { type: 'button', onclick: () => dismiss('backup') }, 'Later'))));
   return box;
@@ -91,8 +95,11 @@ async function boot() {
   if (!(await app.store.meta('firstUseAt'))) await app.store.setMeta('firstUseAt', Date.now());
   let legacy = null;
   try { legacy = await app.store.importLegacyIfNeeded(); } catch (e) { console.error(e); toast(`Old data import failed: ${e.message}`, { tone: 'error', ms: 8000 }); }
+  let betaCopied = null;
+  if (!app.isBeta) { try { betaCopied = await importFromSiblingDb(app.store, 'nutriledger-beta'); } catch (e) { console.error(e); } }
   await loadProfiles();
   await loadPersonal();
+  if (betaCopied?.status === 'imported') setTimeout(() => toast(`Copied ${betaCopied.counts.entries} entries you logged in the beta`, { ms: 6000 }), 800);
   app.store.autoSnapshotIfDue().catch(() => {});
   renderTabbar();
   if (!app.profile) {

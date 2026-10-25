@@ -1,0 +1,16 @@
+Banana
+Nutrition Facts
+Amount Per 100 grams
+Calories 89
+
+% Daily Value*
+Total Fat                              0.3g 0%
+Sodium                                     Tmg 0%
+Potassium                            358mg 10%
+Total Carbohydrate                     239g 7%
+Dietary fiber                                  269g 10%
+Sugar                                             12g
+Protein                                      11g 2%
+Vitamin C                                    14%
+Iron                                               1%
+Vitamin B6                                20%

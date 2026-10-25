@@ -1,9 +1,9 @@
 // Camera features. Libraries are vendored in js/vendor and loaded only when used.
 //  • Barcode: ZXing (Apache-2.0) decodes a photo → Open Food Facts lookup.
 //  • Label: Tesseract.js (Apache-2.0) OCR on-device → parseLabel → user confirms every value.
-import { h, openSheet, toast, clear, numInput, field } from './dom.js';
+import { h, icon, openSheet, toast, clear, numInput, field } from './dom.js';
 import { lookupBarcode } from '../api/off.js';
-import { parseLabel } from '../core/labelparse.js';
+import { parseLabel, combineReads, looksClean } from '../core/labelparse.js';
 import { app } from './state.js';
 
 const base = new URL('../vendor/', import.meta.url);
@@ -19,19 +19,25 @@ function loadScript(src) {
   return loaded.get(src);
 }
 
-function pickPhoto() {
+function pickPhoto({ camera = true } = {}) {
   return new Promise((resolve) => {
-    const inp = h('input', { type: 'file', accept: 'image/*', capture: 'environment', style: { display: 'none' } });
+    // With `capture` iOS opens the camera directly; without it iOS offers Photo Library / Take Photo / Choose File.
+    const inp = h('input', { type: 'file', accept: 'image/*', capture: camera ? 'environment' : null, style: { display: 'none' } });
     inp.addEventListener('change', () => { resolve(inp.files?.[0] || null); inp.remove(); }, { once: true });
     document.body.appendChild(inp); inp.click();
   });
 }
 
-async function fileToCanvas(file, maxSide = 1800) {
+/**
+ * maxSide limits the longest side (fine for camera photos). For OCR, pass { ocr: true }: tall screenshots keep
+ * their native width (target ≈2000 px wide, ≤9 MP) so small print keeps its decimal points.
+ */
+async function fileToCanvas(file, maxSide = 1800, { ocr = false } = {}) {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Could not open that photo')); i.src = url; });
-    const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const w0 = img.naturalWidth; const h0 = img.naturalHeight;
+    const k = ocr ? Math.min(2, 2000 / w0, Math.sqrt(9e6 / (w0 * h0))) : Math.min(1, maxSide / Math.max(w0, h0));
     const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
     return c;
@@ -41,8 +47,8 @@ async function fileToCanvas(file, maxSide = 1800) {
 /**
  * OCR preparation (measured best in tests): upscale ~2× (long side ≤ 2600 px) and Otsu black/white threshold.
  */
-export function prepareForOcr(src) {
-  const k = Math.min(2, 2600 / Math.max(src.width, src.height));
+export function prepareForOcr(src, { keepSize = false } = {}) {
+  const k = keepSize ? 1 : Math.min(2, 2000 / src.width, Math.sqrt(9e6 / (src.width * src.height)));
   const c = document.createElement('canvas'); c.width = Math.round(src.width * k); c.height = Math.round(src.height * k);
   const ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(src, 0, 0, c.width, c.height);
   const d = ctx.getImageData(0, 0, c.width, c.height); const q = d.data;
@@ -102,12 +108,12 @@ async function lookupAndOpen(sheet, ctx, code) {
     if (r.food) { sheet.close(); openPortion(r.food, ctx); return; }
     clear(sheet.body);
     sheet.body.append(h('div.banner', {}, h('b', {}, `Barcode ${code}`), r.error), h('div.btn-row', {},
-      h('button.btn', { type: 'button', onclick: () => { sheet.close(); scanLabel(ctx, code); } }, 'Photograph label'),
+      h('button.btn', { type: 'button', onclick: () => { sheet.close(); chooseLabelSource(ctx, code); } }, 'Photograph label'),
       h('button.btn', { type: 'button', onclick: () => { sheet.close(); openFoodForm({ ctx, initial: { barcode: code } }); } }, 'Enter manually')));
   } catch (e) {
     clear(sheet.body);
     sheet.body.append(h('div.banner', {}, h('b', {}, 'Lookup failed'), e.message), h('div.btn-row', {},
-      h('button.btn', { type: 'button', onclick: () => { sheet.close(); scanLabel(ctx, code); } }, 'Photograph label'),
+      h('button.btn', { type: 'button', onclick: () => { sheet.close(); chooseLabelSource(ctx, code); } }, 'Photograph label'),
       h('button.btn', { type: 'button', onclick: () => { sheet.close(); openFoodForm({ ctx, initial: { barcode: code } }); } }, 'Enter manually')));
   }
 }
@@ -140,25 +146,72 @@ export async function ocrImage(canvas, onProgress) {
   return data.text || '';
 }
 
-export async function scanLabel(ctx, barcode = null) {
-  const file = await pickPhoto(); if (!file) return;
+/** Let the user choose how to provide nutrition values: camera, a photo/screenshot, or pasted text. */
+export function chooseLabelSource(ctx, barcode = null) {
+  const sheet = openSheet({ title: 'Add nutrition from a picture' });
+  const opt = (id, ic, title, sub, fn) => h('button.row', { type: 'button', id, onclick: fn }, icon(ic), h('div.main', {}, h('div.title', {}, title), h('div.sub', { style: { whiteSpace: 'normal' } }, sub)));
+  sheet.body.append(h('div.group', {},
+    opt('src-camera', 'camera', 'Take a photo of the label', 'Point the camera at the nutrition table on the pack.', () => { sheet.close(); scanLabel(ctx, barcode, { camera: true }); }),
+    opt('src-library', 'down', 'Choose a photo or screenshot', 'For example a screenshot of a nutrition table from a website. Crop the screenshot to the table first for best results.', () => { sheet.close(); scanLabel(ctx, barcode, { camera: false }); }),
+    opt('src-paste', 'copy', 'Paste nutrition text', 'On a web page, select the nutrition table, Copy, and paste here. Most accurate: no text recognition needed.', () => { sheet.close(); pasteText(ctx, barcode); })),
+  h('div.hint', {}, 'You will see every value before anything is saved. Values from websites are only as good as the website.'));
+}
+
+function pasteText(ctx, barcode) {
+  const sheet = openSheet({ title: 'Paste nutrition text' });
+  const ta = h('textarea', { rows: '10', id: 'paste-text', placeholder: 'Nutrition Facts\nServing size 1 cup (228g)\nCalories 250\nTotal Fat 12g\n…', style: { width: '100%', fontSize: '16px' } });
+  const msg = h('div');
+  sheet.body.append(ta, msg, h('button.btn.primary.block', { type: 'button', id: 'paste-read', style: { marginTop: '12px' }, onclick: async () => {
+    const r = parseLabel(ta.value);
+    clear(msg);
+    if (r.found.length < 2) { msg.append(h('div.banner', {}, 'Could not find nutrition values in that text. Copy the whole table, including the numbers and units (g, mg, kcal).')); return; }
+    const { openFoodForm } = await import('./add.js');
+    sheet.close();
+    openFoodForm({ ctx, initial: labelInitial(r, barcode), src: 'label', conf: 'user', refText: 'Nutrition text you pasted, checked by you', warnings: labelWarnings(r) });
+  } }, 'Read values'));
+  setTimeout(() => ta.focus(), 250);
+}
+
+function labelInitial(r, barcode) {
+  return { per100: r.per100, suspicious: r.suspicious, barcode, servingG: r.servingG, portions: r.servingG ? [[`1 serving (${r.servingG} g)`, r.servingG]] : [] };
+}
+function labelWarnings(r) {
+  const w = [...r.warnings];
+  if (r.found.length < 3) w.unshift('Only a few values could be read. Retake the picture closer and flatter, or type the values.');
+  if (r.basis === 'perServing' && r.servingG) w.push(`Values were per serving (${r.servingG} g); they were converted to per 100 g.`);
+  return w;
+}
+
+export async function scanLabel(ctx, barcode = null, { camera = true } = {}) {
+  const file = await pickPhoto({ camera }); if (!file) return;
   const sheet = openSheet({ title: 'Reading label' });
   const bar = h('div.progress', {}, h('span', { style: { width: '5%' } }));
   const msg = h('div.empty', {}, 'Preparing photo…');
   sheet.body.append(msg, bar, h('div.hint', {}, 'Text recognition runs on your phone; the photo is not uploaded. First use loads about 7 MB.'));
   try {
-    const original = await fileToCanvas(file, 1600);
-    const photo = original.toDataURL('image/jpeg', 0.6);
-    const canvas = prepareForOcr(original);
+    const original = await fileToCanvas(file, 1600, { ocr: true });
+    const photo = (await fileToCanvas(file, 1200)).toDataURL('image/jpeg', 0.6);
+    const at = (W) => { // resized copy W px wide (≤9 MP), then thresholded
+      const k = Math.min(W / original.width, Math.sqrt(9e6 / (original.width * original.height)));
+      const c = document.createElement('canvas'); c.width = Math.round(original.width * k); c.height = Math.round(original.height * k);
+      const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(original, 0, 0, c.width, c.height);
+      return prepareForOcr(c, { keepSize: true });
+    };
+    const progress = (m) => { if (m.status && typeof m.progress === 'number') { bar.firstChild.style.width = `${Math.max(5, Math.round(m.progress * 100))}%`; } };
     msg.textContent = 'Recognising text…';
-    const text = await ocrImage(canvas, (m) => { if (m.status && typeof m.progress === 'number') { msg.textContent = m.status.replace(/^./, (c) => c.toUpperCase()); bar.firstChild.style.width = `${Math.max(5, Math.round(m.progress * 100))}%`; } });
-    const r = parseLabel(text);
+    const texts = [await ocrImage(at(1200), progress)];
+    let r = combineReads(texts);
+    if (!looksClean(r)) {
+      // Different sizes produce different OCR mistakes; reading again and combining catches most of them
+      msg.textContent = 'Double-checking the numbers (2 more reads)…';
+      texts.push(await ocrImage(at(2000), progress));
+      texts.push(await ocrImage(at(800), progress));
+      r = combineReads(texts);
+    }
     const { openFoodForm } = await import('./add.js');
     sheet.close();
-    const warnings = [...r.warnings];
-    if (r.found.length < 3) warnings.unshift('Only a few values could be read. Retake the photo closer and flatter, or type the values.');
-    if (r.basis === 'perServing' && r.servingG) warnings.push(`The label only showed values per serving (${r.servingG} g); they were converted to per 100 g.`);
-    openFoodForm({ ctx, initial: { per100: r.per100, suspicious: r.suspicious, barcode, servingG: r.servingG, portions: r.servingG ? [[`1 serving (${r.servingG} g)`, r.servingG]] : [] }, src: 'label', conf: 'label', warnings, photo });
+    openFoodForm({ ctx, initial: labelInitial(r, barcode), src: 'label', conf: camera ? 'label' : 'user',
+      refText: camera ? 'Your label photo, checked by you' : 'Your photo/screenshot, checked by you', warnings: labelWarnings(r), photo });
   } catch (e) {
     clear(sheet.body);
     sheet.body.append(h('div.banner', {}, h('b', {}, 'Could not read the label'), e.message));

@@ -165,3 +165,29 @@ test('owner real backup (local only, not in repo) migrates correctly if present'
   assert.equal(sumNew, sumOld, 'calories identical after migration');
   assert.equal(v.report.duplicateFoodIds.length, 3);
 });
+
+import { importFromSiblingDb } from '../../js/store/db.js';
+test('beta → live copy: single profiles merge into one person, entries copied once, source untouched', async () => {
+  const beta = await openDB(`nutriledger-beta-${process.pid}`);
+  await beta.put('profiles', { id: 'p-beta', name: 'Manish', sex: 'male', age: 47, heightCm: 170, weightKg: 71, activity: 'moderate', goal: 'lose', updatedAt: 5 });
+  await beta.addEntries([entryFor('p-beta', '2026-10-25'), entryFor('p-beta', '2026-10-25', 'd:chapati', 80)]);
+  await beta.put('weights', { id: 'w-p-beta|2026-10-25', profileId: 'p-beta', date: '2026-10-25', kg: 71 });
+  const live = await fresh();
+  await live.put('profiles', { id: 'p-p1', name: 'MJ', sex: 'male', age: 47, heightCm: 168, weightKg: 72, activity: 'light', goal: 'lose', updatedAt: 1, createdAt: 1 });
+  await live.addEntries([entryFor('p-p1', '2026-10-20')]);
+  const r = await importFromSiblingDb(live, beta.name);
+  assert.equal(r.status, 'imported');
+  const profs = await live.all('profiles');
+  assert.equal(profs.length, 1, 'no duplicate person');
+  assert.equal(profs[0].id, 'p-p1'); assert.equal(profs[0].heightCm, 170, 'newer beta settings win');
+  assert.equal((await live.entriesOn('p-p1', '2026-10-25')).length, 2);
+  assert.equal((await live.entriesOn('p-p1', '2026-10-20')).length, 1, 'existing live data kept');
+  assert.equal((await live.byProfile('weights', 'p-p1')).length, 1);
+  assert.equal((await beta.counts()).entries, 2, 'beta untouched');
+  assert.equal((await importFromSiblingDb(live, beta.name)).status, 'imported', 'second call is a no-op');
+  assert.equal((await live.entriesOn('p-p1', '2026-10-25')).length, 2, 'not copied twice');
+});
+test('beta → live copy: nothing to copy when the beta database does not exist', async () => {
+  const live = await fresh();
+  assert.equal((await importFromSiblingDb(live, 'does-not-exist-db')).status, 'none');
+});
