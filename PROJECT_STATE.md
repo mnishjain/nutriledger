@@ -22,5 +22,6 @@ Read this first if you are a new session / another AI picking up the work.
 ## Status log
 - 2026-10-25: Phase 1 audit done (docs/AUDIT.md). Branch created.
 - 2026-10-25: v3 built on branch `rebuild-v3`. 59 unit + 24 browser tests pass (docs/TEST_RESULTS.md), incl. upgrade from the real v2 production app.
-- BLOCKER: push to GitHub refused (Claude GitHub App not installed on mnishjain/nutriledger). Nothing is on GitHub yet; production untouched.
-- NEXT: once push works → push `rebuild-v3`, open PR, publish `/beta/` on main via tools/make-beta.mjs, owner runs docs/IPHONE_ACCEPTANCE.md, then promote on approval.
+- 2026-10-25 21:55 IST: GitHub access fixed by owner. Pushed `rebuild-v3`; PR #1 opened (https://github.com/mnishjain/nutriledger/pull/1).
+- 2026-10-25: `/beta/` published on main (commit e190e63) via tools/make-beta.mjs. Live root files unchanged (still v2). Smoke-tested v2 root + v3 beta side by side.
+- NEXT: owner runs docs/IPHONE_ACCEPTANCE.md on https://mnishjain.github.io/nutriledger/beta/ and reports. On approval: copy site files from rebuild-v3 to main root, regenerate sw.js, delete /beta/, push; v2 Home Screen app auto-migrates on next open (tested in e2e UPGRADE PATH).
