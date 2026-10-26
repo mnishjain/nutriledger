@@ -1,7 +1,7 @@
 # Known limitations (honest list)
 
 1. **Data lives on one phone.** No automatic cloud copy. Back up weekly (the app reminds you after 7 days). Deleting the Home Screen app or clearing Safari data deletes the diary.
-2. **Home Screen app and Safari tab are separate.** Use only the Home Screen app. Data logged in a Safari tab can also be removed by Safari after 7 days without use.
+2. **Home Screen app and Safari tab are separate.** On iPhone the Home Screen app starts EMPTY; nothing is copied from Safari. Move data with Copy my data (Safari) → Paste my data (Home Screen app), then use only the Home Screen app. Data in a Safari tab can be removed by Safari after 7 days without use.
 3. **Not tested on real iPhone Safari by me.** All automated browser tests ran in Chromium (Google's engine) with an iPhone-sized screen. Safari-specific items are in docs/IPHONE_ACCEPTANCE.md.
 4. **Dish values are estimates** (recipe-based). Restaurant and festive food can be far off. Oil/ghee is the biggest unknown; set it when logging.
 5. **Micronutrient coverage is partial.** USDA rows used here have no iron/calcium/potassium; IFCT has no vitamin B12; packaged foods vary. The app says “not enough data” rather than guessing.

@@ -29,3 +29,10 @@ Read this first if you are a new session / another AI picking up the work.
 - 2026-10-25: PROMOTED v3 to main root (merge of rebuild-v3). /beta/ retired: redirect page + self-unregistering worker; live app copies IndexedDB "nutriledger-beta" once. Simulated real switch (old main → new main): beta bookmark lands on live app, 1 profile, all entries kept.
 - Note: GitHub Pages lets browsers reuse pages for up to 10 minutes, so right after a deploy the old version can show briefly.
 - NEXT: owner uses live app; watch for Safari-specific issues; consider cloud backup only if owner asks.
+
+## Incident 26 Oct 2026 — "all data lost" after adding to Home Screen
+- Cause: iPhone Home Screen web apps get separate, EMPTY storage; Safari's IndexedDB is not copied (only cookies, iOS 17.2+). Owner's data stayed in Safari. Not a storage failure. Process failure: told owner to add to Home Screen without migration steps.
+- Second defect found: empty app showed tab bar; More crashed (no profile), so no way to restore without a dummy profile.
+- Fix (deployed): welcome screen for empty app with "Bring my data from Safari" (clipboard paste or backup file) and no forced profile; tab bar hidden until data exists; Safari banner with one-tap "Copy my data" whenever Safari holds entries; Copy/Paste also in More → Backup & restore. Clipboard write uses ClipboardItem with a Promise inside the tap (Safari requires the write to start within the tap).
+- New e2e test reproduces the incident with two separate storages. 71 unit + 30 browser tests pass.
+- Open decision for owner: automatic cloud backup (free, needs his account) so the phone is never the only copy.

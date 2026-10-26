@@ -7,6 +7,7 @@ import { localDate, prettyDate } from '../core/dates.js';
 import { NUTRIENTS, fmt, isNum } from '../core/nutrients.js';
 import { uid } from '../core/entries.js';
 import { SOURCES } from '../core/library.js';
+import { copyAllData, openBringData } from './transfer.js';
 
 export async function renderMore(root) {
   clear(root);
@@ -157,6 +158,11 @@ async function openBackup() {
       est ? h('tr', {}, h('td', {}, 'Storage used'), h('td', {}, `${(est.usage / 1048576).toFixed(1)} MB`)) : null)),
     h('button.btn.primary.block', { type: 'button', id: 'export-backup', onclick: async () => { await exportBackup(); } }, icon('share', 18), 'Export backup'),
     h('div.hint', {}, 'Choose “Save to Files” → iCloud Drive. Do this weekly; the app reminds you.'),
+    h('div.section-title', {}, 'Move to the Home Screen app or another phone'),
+    h('div.btn-row', {},
+      h('button.btn', { type: 'button', id: 'copy-data', onclick: () => copyAllData() }, icon('copy', 18), 'Copy my data'),
+      h('button.btn', { type: 'button', id: 'paste-data', onclick: () => { sheet.close(); openBringData({ emptyApp: false }); } }, 'Paste my data')),
+    h('div.hint', {}, 'On iPhone, Safari and the Home Screen app keep separate data. Copy in one, then Paste in the other.'),
     h('div.section-title', {}, 'Restore from a backup file'));
   const file = h('input', { type: 'file', accept: 'application/json,.json', id: 'restore-file' });
   const out = h('div');
