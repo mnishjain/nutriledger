@@ -7,7 +7,7 @@ Automated tests ran in Chromium at iPhone size. They cannot prove Safari-specifi
 | # | Do this | Expected |
 |---|---|---|
 | 1 | Open https://mnishjain.github.io/nutriledger/beta/ in Safari | Yellow banner: “Use NutriLedger from your Home Screen” |
-| 2 | Share → Add to Home Screen → open **NL Beta** from the Home Screen | No banner; profile set-up appears |
+| 2 | ••• → Share → Add to Home Screen → open the icon | Welcome screen says it starts empty; tap Bring my data from Safari → Paste (after tapping Copy my data in Safari) |
 | 3 | Fill profile (age, height, weight); tap Start tracking | Today shows calories left (≈1,730 for 47 y/168 cm/72 kg) |
 | 4 | Tap **+**, type `roti`, tap Chapati, choose 2, ghee “5 g (1 tsp)”, Add | Diary shows Chapati, ≈280 kcal |
 | 5 | Add `dal`, `curd`, `banana`; add `walnuts` 5 halves | Each appears in the right meal; totals update |

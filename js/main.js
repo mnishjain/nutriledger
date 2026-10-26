@@ -6,6 +6,7 @@ import { renderMeals } from './ui/meals.js';
 import { renderInsights } from './ui/insights.js';
 import { renderMore, editProfile, exportBackup } from './ui/more.js';
 import { openAdd } from './ui/add.js';
+import { openBringData, copyAllData, isIOS, isStandalone } from './ui/transfer.js';
 import { slotForTime, localDate } from './core/dates.js';
 
 const root = $('#app');
@@ -18,6 +19,7 @@ function fatal(msg, detail = '') {
 
 function renderTabbar() {
   const bar = $('#tabbar'); clear(bar);
+  if (!app.profile) return; // nothing to navigate to until a profile exists or data is brought in
   const nav = h('nav', { 'aria-label': 'Main' });
   for (const [id, label, ic] of TABS) {
     nav.append(h('button', { type: 'button', class: `${id === app.tab ? 'on' : ''} ${id === 'add' ? 'add-tab' : ''}`, id: `tab-${id}`, 'aria-current': id === app.tab ? 'page' : null, onclick: () => {
@@ -30,18 +32,25 @@ function renderTabbar() {
 
 async function banners() {
   const box = h('div', { id: 'banners' });
-  const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = isStandalone();
+  const ios = isIOS();
   // Dismissals are remembered in the app database: Safari tab for 30 days, backup reminder for 1 day
   const dismissed = (await app.store.meta('dismissed', {})) || {};
   const isOff = (k, days) => dismissed[k] && Date.now() - dismissed[k] < days * 86400000;
   const dismiss = async (k) => { dismissed[k] = Date.now(); await app.store.setMeta('dismissed', dismissed); render(); };
-  if (ios && !standalone && !isOff('safari', 30)) box.append(h('div.banner', { id: 'safari-banner' }, h('b', {}, 'Tip: add NutriLedger to your Home Screen'),
-    'In Safari tap ••• (bottom right) → Share → scroll down → “Add to Home Screen” → keep “Open as Web App” on → Add. Then open it from the new icon. ',
-    'Using a bookmark also works, but Safari may delete this site’s data if you don’t open it for 7 days, so back up often.',
+  const c = await app.store.counts();
+  if (ios && !standalone && c.entries > 0) {
+    // Safari copy with data: always offer the move (the Home Screen app starts EMPTY on iPhone)
+    box.append(h('div.banner', { id: 'safari-banner' }, h('b', {}, 'You are in Safari. The Home Screen app has separate, empty storage.'),
+      'To use the Home Screen icon: 1) tap Copy my data, 2) open the Home Screen icon, 3) tap “Bring my data from Safari” → Paste my data. ',
+      'Staying in Safari also works, but Safari can delete this data if you don’t open it for 7 days.',
+      h('div.actions', {}, h('button.btn.primary', { type: 'button', id: 'banner-copy', onclick: () => copyAllData() }, icon('copy', 18), 'Copy my data'),
+        isOff('safari', 7) ? null : h('button.btn', { type: 'button', onclick: () => dismiss('safari') }, 'Hide for a week'))));
+  } else if (ios && !standalone && !isOff('safari', 30)) box.append(h('div.banner', { id: 'safari-banner' }, h('b', {}, 'Tip: add NutriLedger to your Home Screen'),
+    'In Safari tap ••• (bottom right) → Share → scroll down → “Add to Home Screen” → keep “Open as Web App” on → Add. Then use only the new icon. ',
+    'Data in Safari and in the Home Screen app is kept separately by iPhone.',
     h('div.actions', {}, h('button.btn', { type: 'button', onclick: () => dismiss('safari') }, 'Got it'))));
   const last = await app.store.meta('lastBackupAt', null);
-  const c = await app.store.counts();
   const first = await app.store.meta('firstUseAt', Date.now());
   const age = Date.now() - (last || first);
   const backupDays = ios && !standalone ? 3 : 7; // a Safari tab's data is at more risk than a Home Screen app's
@@ -86,6 +95,23 @@ async function showMigrationReport(r) {
   await app.store.setMeta('migrationReportShown', true);
 }
 
+/** Empty app: never push straight into a blank profile. Offer to bring existing data in first. */
+function renderWelcome() {
+  clear(root); renderTabbar();
+  const hsApp = isIOS() && isStandalone();
+  const afterIn = async () => { await render(); app.persistence = await requestPersistence(); };
+  root.append(h('div', { id: 'welcome', style: { marginTop: '24px' } },
+    h('h1', {}, 'NutriLedger'),
+    h('p', {}, 'Track Indian vegetarian meals without weighing food. Works offline.'),
+    hsApp ? h('div.banner', { id: 'hs-empty-banner' }, h('b', {}, 'Used NutriLedger in Safari before?'),
+      'This Home Screen app starts empty: iPhone keeps its storage separate from Safari. Your data is safe in Safari. Bring it here before you start.') : null,
+    h('div.group', {},
+      h('button.row', { type: 'button', id: 'welcome-bring', onclick: () => openBringData({ emptyApp: true, onDone: afterIn }) }, icon('copy'),
+        h('div.main', {}, h('div.title', {}, hsApp ? 'Bring my data from Safari' : 'Bring my data in'), h('div.sub', { style: { whiteSpace: 'normal' } }, 'Paste copied data, or restore a backup file'))),
+      h('button.row', { type: 'button', id: 'start-setup', onclick: () => editProfile(null, { firstRun: true, onDone: () => afterIn() }) }, icon('user'),
+        h('div.main', {}, h('div.title', {}, 'I’m new: set up my profile'), h('div.sub', {}, 'Takes one minute'))))));
+}
+
 async function boot() {
   app.isBeta = /\/beta\//.test(location.pathname);
   app.dbName = app.isBeta ? 'nutriledger-beta' : 'nutriledger';
@@ -103,10 +129,7 @@ async function boot() {
   app.store.autoSnapshotIfDue().catch(() => {});
   renderTabbar();
   if (!app.profile) {
-    clear(root);
-    root.append(h('div.card', { style: { marginTop: '30px' } }, h('h1', {}, 'NutriLedger'), h('p', {}, 'Track Indian vegetarian meals without weighing food. Works offline. Your data stays on this phone.'),
-      h('button.btn.primary.block', { type: 'button', id: 'start-setup', onclick: () => editProfile(null, { firstRun: true, onDone: () => render() }) }, 'Set up profile')));
-    editProfile(null, { firstRun: true, onDone: () => render() });
+    renderWelcome();
   } else {
     await render();
     app.persistence = await requestPersistence();

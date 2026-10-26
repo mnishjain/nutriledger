@@ -25,3 +25,10 @@ Read this first if you are a new session / another AI picking up the work.
 - 2026-10-25 21:55 IST: GitHub access fixed by owner. Pushed `rebuild-v3`; PR #1 opened (https://github.com/mnishjain/nutriledger/pull/1).
 - 2026-10-25: `/beta/` published on main (commit e190e63) via tools/make-beta.mjs. Live root files unchanged (still v2). Smoke-tested v2 root + v3 beta side by side.
 - NEXT: owner runs docs/IPHONE_ACCEPTANCE.md on https://mnishjain.github.io/nutriledger/beta/ and reports. On approval: copy site files from rebuild-v3 to main root, regenerate sw.js, delete /beta/, push; v2 Home Screen app auto-migrates on next open (tested in e2e UPGRADE PATH).
+
+## Incident 26 Oct 2026 — "all data lost" after adding to Home Screen
+- Cause: iPhone Home Screen web apps get separate, EMPTY storage; Safari's IndexedDB is not copied (only cookies, iOS 17.2+). Owner's data stayed in Safari. Not a storage failure. Process failure: told owner to add to Home Screen without migration steps.
+- Second defect found: empty app showed tab bar; More crashed (no profile), so no way to restore without a dummy profile.
+- Fix (deployed): welcome screen for empty app with "Bring my data from Safari" (clipboard paste or backup file) and no forced profile; tab bar hidden until data exists; Safari banner with one-tap "Copy my data" whenever Safari holds entries; Copy/Paste also in More → Backup & restore. Clipboard write uses ClipboardItem with a Promise inside the tap (Safari requires the write to start within the tap).
+- New e2e test reproduces the incident with two separate storages. 71 unit + 30 browser tests pass.
+- Open decision for owner: automatic cloud backup (free, needs his account) so the phone is never the only copy.

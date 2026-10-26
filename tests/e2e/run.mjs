@@ -50,6 +50,7 @@ async function newCtx(opts = {}) {
 }
 async function open(page, url = BASE) { await page.goto(url); await page.waitForFunction(() => window.__nlReady === true, null, { timeout: 15000 }); }
 async function setupProfile(page, name = 'Manish', { age = '47', height = '168', weight = '72' } = {}) {
+  if (!(await page.locator('.sheet.open #profile-save').count())) await page.locator('#start-setup').click();
   const s = page.locator('.sheet.open').last();
   await s.locator('#profile-save').waitFor();
   await s.getByLabel('Name', { exact: true }).fill(name);
@@ -253,7 +254,7 @@ test('backup export → restore into a fresh install reproduces data', async () 
   near(all.reduce((s, x) => s + x.n.kcal, 0), exported.data.entries.reduce((s, x) => s + x.n.kcal, 0), 0.001, 'identical calories');
   await ctx.close(); await b.ctx.close();
 });
-async function setupProfile2(page) { await page.click('#start-setup'); await setupProfile(page, 'Temp'); }
+
 
 test('restore from OLD-app backup file (owner format) via the restore screen', async () => {
   const { ctx, page } = await newCtx(); await open(page); await setupProfile(page);
@@ -593,6 +594,61 @@ test('beta data is copied into the live app once, without duplicating the person
   await page.reload(); await page.waitForFunction(() => window.__nlReady);
   eq((await dayEntries(page)).length, 2, 'not copied twice');
   await ctx.close();
+});
+
+test('REPORTED BUG 26 Oct: Safari data → new Home Screen app (separate empty storage) is moved with Copy/Paste, nothing lost', async () => {
+  // Two separate browser contexts = two separate storages, exactly like iPhone Safari vs the Home Screen app
+  const safari = await newCtx(); await safari.ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await open(safari.page); await setupProfile(safari.page, 'Manish');
+  await addFood(safari.page, 'paneer'); await addFood(safari.page, 'roti'); await addFood(safari.page, 'banana');
+  const before = await appEval(safari.page, async () => ({ e: (await window.__nl.store.all('entries')).map((x) => x.n.kcal).sort(), p: window.__nl.profile }));
+  // Safari shows the move banner with Copy
+  await safari.page.waitForSelector('#safari-banner #banner-copy');
+  await safari.page.click('#banner-copy');
+  await safari.page.waitForFunction(() => /Copied \d+ diary/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 10000 });
+  const copied = await safari.page.evaluate(() => navigator.clipboard.readText());
+  assert(copied.includes('nutriledger-backup'), `clipboard holds the data — got ${JSON.stringify(copied.slice(0, 80))}; toast: ${await safari.page.textContent('#toast')}; errors: ${safari.page.errors}`);
+  // Home Screen app: separate storage, standalone mode
+  const hs = await newCtx(); await hs.ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await hs.page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
+  await open(hs.page);
+  await hs.page.waitForSelector('#welcome #hs-empty-banner');
+  eq(await hs.page.locator('#tabbar button').count(), 0, 'no tabs in an empty app (nothing to crash into)');
+  eq(await hs.page.locator('.sheet.open #profile-save').count(), 0, 'not pushed into a blank profile');
+  await hs.page.screenshot({ path: `${OUT}/hs-welcome.png` });
+  await hs.page.evaluate((t) => navigator.clipboard.writeText(t), copied);
+  await hs.page.click('#welcome-bring'); await hs.page.click('#transfer-paste');
+  await hs.page.waitForSelector('#transfer-preview');
+  assert((await hs.page.textContent('#transfer-preview')).includes('Manish'), 'preview names the profile');
+  await hs.page.screenshot({ path: `${OUT}/hs-paste-preview.png` });
+  await hs.page.click('#transfer-go'); await hs.page.waitForSelector('#kcal-left');
+  const after = await appEval(hs.page, async () => ({ e: (await window.__nl.store.all('entries')).map((x) => x.n.kcal).sort(), p: window.__nl.profile }));
+  eq(JSON.stringify(after.e), JSON.stringify(before.e), 'every entry identical');
+  eq(after.p.name, 'Manish', 'profile'); eq(after.p.heightCm, before.p.heightCm, 'profile details');
+  // and it persists in the Home Screen app's own storage
+  await hs.page.reload(); await hs.page.waitForFunction(() => window.__nlReady);
+  eq((await appEval(hs.page, () => window.__nl.store.all('entries'))).length, 3, 'still there after reopening');
+  await safari.ctx.close(); await hs.ctx.close();
+});
+
+test('empty app: paste fallback box and backup file both work from the welcome screen', async () => {
+  const src = await newCtx(); await open(src.page); await setupProfile(src.page, 'Asha'); await addFood(src.page, 'dal');
+  const text = JSON.stringify(await appEval(src.page, () => window.__nl.store.exportAll()));
+  const a = await newCtx(); await open(a.page);
+  await a.page.click('#welcome-bring'); await a.page.fill('#transfer-text', text);
+  await a.page.waitForSelector('#transfer-go'); await a.page.click('#transfer-go'); await a.page.waitForSelector('#kcal-left');
+  eq(await appEval(a.page, () => window.__nl.profile.name), 'Asha', 'pasted via fallback box');
+  const f = path.join(OUT, 'transfer.json'); fs.writeFileSync(f, text);
+  const b = await newCtx(); await open(b.page);
+  await b.page.click('#welcome-bring'); await b.page.setInputFiles('#transfer-file', f);
+  await b.page.click('#transfer-go'); await b.page.waitForSelector('#kcal-left');
+  eq((await appEval(b.page, () => window.__nl.store.all('entries'))).length, 1, 'restored from file');
+  await b.page.click('#welcome-bring').catch(() => {});
+  const c = await newCtx(); await open(c.page);
+  await c.page.click('#welcome-bring'); await c.page.fill('#transfer-text', 'hello this is not data at all, just text');
+  await c.page.waitForSelector('#transfer-text ~ div .banner.danger, .banner.danger');
+  eq(await appEval(c.page, () => window.__nl.store.counts().then((x) => x.profiles)), 0, 'garbage never writes anything');
+  for (const x of [src, a, b, c]) await x.ctx.close();
 });
 
 // ---------------------------------------------------------------- runner
