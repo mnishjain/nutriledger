@@ -705,6 +705,84 @@ test('Google AI lookup: nonsense paste is rejected; plain Google search also ava
   await ctx.close();
 });
 
+const GKEY = 'AIzaSyE2E_TEST_KEY_abcdefghijklmnopqrstu';
+const GMODELS = { models: [{ name: 'models/gemini-3.8-flash', supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-3.8-flash-lite', supportedGenerationMethods: ['generateContent'] }] };
+const GANSWER = { candidates: [{ content: { parts: [{ text: 'Per 100 g:\nEnergy: 536 kcal\nProtein: 6.8 g\nCarbohydrate: 52.9 g\nTotal sugars: 2.6 g\nFibre: unknown\nFat: 33.2 g\nSaturated fat: 13.6 g\nSodium: 698 mg\nPotassium: unknown\nCalcium: unknown\nIron: unknown\nSource: manufacturer label.' }] },
+  groundingMetadata: { groundingChunks: [{ web: { uri: 'https://www.haldiram.com/p', title: 'haldiram.com' } }] } }] };
+async function mockGemini(page, { gen = () => ({ status: 200, json: GANSWER }), list = () => ({ status: 200, json: GMODELS }) } = {}) {
+  const seen = [];
+  await page.route('https://generativelanguage.googleapis.com/**', async (r) => {
+    const u = r.request().url(); seen.push({ url: u, body: r.request().postData() });
+    const x = u.includes(':generateContent') ? gen(u) : list(u);
+    await r.fulfill({ status: x.status, contentType: 'application/json', body: JSON.stringify(x.json) });
+  });
+  return seen;
+}
+async function saveKey(page, key = GKEY) {
+  await page.click('#tab-more'); await page.click('#open-gemini');
+  await page.fill('#gemini-key', key); await page.click('#gemini-save');
+}
+
+test('Gemini: key saved after a real test call; never included in backups or Copy my data', async () => {
+  const { ctx, page } = await newCtx(); await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await open(page); await setupProfile(page); const seen = await mockGemini(page);
+  await saveKey(page);
+  await page.waitForSelector('#gemini-status .banner:has-text("Key saved")');
+  assert(seen.some((c) => c.url.includes('/v1beta/models?') && c.url.includes(GKEY)), 'test call made');
+  eq((await appEval(page, () => window.__nl.store.meta('gemini'))).model, 'gemini-3.8-flash', 'model chosen');
+  await page.screenshot({ path: `${OUT}/gemini-settings.png` });
+  const backup = JSON.stringify(await appEval(page, () => window.__nl.store.exportAll()));
+  assert(!backup.includes(GKEY), 'key not in backup');
+  await page.locator('.sheet.open [aria-label=Close]').last().click();
+  await page.click('#open-backup'); await page.click('#copy-data');
+  await page.waitForFunction(() => /Copied/.test(document.querySelector('#toast')?.textContent || ''));
+  assert(!(await page.evaluate(() => navigator.clipboard.readText())).includes(GKEY), 'key not in Copy my data');
+  await ctx.close();
+});
+
+test('Gemini: invalid key is explained and NOT saved', async () => {
+  const { ctx, page } = await newCtx(); await open(page); await setupProfile(page);
+  await mockGemini(page, { list: () => ({ status: 400, json: { error: { code: 400, message: 'API key not valid. Please pass a valid API key.', details: [{ reason: 'API_KEY_INVALID' }] } } }) });
+  await saveKey(page);
+  await page.waitForSelector('#gemini-test-error');
+  assert((await page.textContent('#gemini-test-error')).includes('not valid'), 'clear message');
+  eq(await appEval(page, () => window.__nl.store.meta('gemini')), null, 'not saved');
+  await ctx.close();
+});
+
+test('Gemini: one tap from "no match" → values to check → saved as Estimate with source', async () => {
+  const { ctx, page } = await newCtx(); await open(page); await setupProfile(page); const seen = await mockGemini(page);
+  await saveKey(page); await page.waitForSelector('#gemini-status .banner:has-text("Key saved")');
+  await page.locator('.sheet.open [aria-label=Close]').last().click();
+  await page.click('#tab-add');
+  await page.locator('.sheet.open input[type=search]').fill('haldiram aloo bhujia'); await page.waitForTimeout(300);
+  await page.locator('.sheet.open #nomatch-lookup').click();
+  await page.waitForSelector('#food-save', { timeout: 15000 });
+  const gen = seen.find((c) => c.url.includes(':generateContent'));
+  assert(gen && JSON.parse(gen.body).tools[0].google_search, 'searched with Google');
+  const s = page.locator('.sheet.open').last();
+  eq(await s.getByLabel('Calories (kcal)').inputValue(), '536', 'kcal'); eq(await s.getByLabel('Sodium (mg)').inputValue(), '698', 'sodium'); eq(await s.getByLabel('Fibre (g)').inputValue(), '', 'unknown blank');
+  assert((await s.textContent()).includes('haldiram.com'), 'source shown');
+  await page.screenshot({ path: `${OUT}/gemini-confirm.png` });
+  await s.locator('#food-save').click(); await page.waitForSelector('.sheet.open #add-to-diary');
+  const f = await appEval(page, () => window.__nl.userFoods[0]);
+  eq(f.conf, 'estimate', 'Estimate'); assert(f.ref.includes('Gemini') && f.ref.includes('haldiram.com'), 'ref records Gemini and source');
+  await ctx.close();
+});
+
+test('Gemini: quota exhausted → plain message, manual Google AI option still there', async () => {
+  const { ctx, page } = await newCtx(); await open(page); await setupProfile(page);
+  await mockGemini(page, { gen: () => ({ status: 429, json: { error: { code: 429, message: 'Resource has been exhausted (e.g. check quota).' } } }) });
+  await saveKey(page); await page.waitForSelector('#gemini-status .banner:has-text("Key saved")');
+  await page.locator('.sheet.open [aria-label=Close]').last().click();
+  await page.click('#tab-add'); await page.locator('.sheet.open input[type=search]').fill('zzz snack'); await page.waitForTimeout(300);
+  await page.locator('.sheet.open #nomatch-lookup').click();
+  await page.waitForSelector('#gemini-error');
+  assert((await page.textContent('#gemini-error')).includes('limit'), 'quota explained');
+  assert(await page.locator('#lookup-ai').isVisible(), 'Ask Google AI still offered');
+  await ctx.close();
+});
+
 // ---------------------------------------------------------------- runner
 let failed = 0;
 for (const t of tests.filter((x) => x.name.includes(FILTER))) {
