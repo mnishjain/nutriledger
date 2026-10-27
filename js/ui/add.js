@@ -10,6 +10,7 @@ import { SLOTS, prettyDate, localDate } from '../core/dates.js';
 import { searchProducts } from '../api/off.js';
 import { confBadge, sourceLine, kcal, g1, confExplain } from './common.js';
 import { scanBarcode, chooseLabelSource } from './scan.js';
+import { openWebLookup } from './weblookup.js';
 
 /**
  * ctx: { date, slot, mode: 'log' | 'pick', onPick(item) }
@@ -72,8 +73,10 @@ export function openAdd(ctx) {
     clear(results);
     if (res.length) results.append(h('div.group', {}, res.map((r) => rowFor(r.f))));
     else results.append(h('div.card', {}, h('b', {}, `No match for “${q}” in your foods or the built-in database.`), h('div.hint', {}, 'Nothing is guessed. Search packaged foods online, scan the barcode or label, or enter it yourself.'),
+      h('button.btn.primary.block', { type: 'button', id: 'nomatch-lookup', style: { marginTop: '10px' }, onclick: () => openWebLookup(ctx, q) }, icon('search', 18), 'Look it up with Google AI'),
       h('div.btn-row', {}, h('button.btn', { type: 'button', onclick: () => openFoodForm({ ctx, initial: { name: q } }) }, 'Create food'), h('button.btn', { type: 'button', onclick: () => openQuickAdd(ctx, q) }, 'Quick add'))));
-    online.append(h('button.btn.block', { type: 'button', id: 'search-online', onclick: () => runOnline(q) }, icon('search', 18), `Search packaged foods online for “${q}”`), h('div.hint', { style: { textAlign: 'center' } }, 'Uses Open Food Facts (free, crowd-sourced). Needs internet.'));
+    online.append(h('button.btn.block', { type: 'button', id: 'search-online', onclick: () => runOnline(q) }, icon('search', 18), `Search packaged foods online for “${q}”`), h('div.hint', { style: { textAlign: 'center' } }, 'Uses Open Food Facts (free, crowd-sourced). Needs internet.'),
+      h('button.btn.block', { type: 'button', id: 'web-lookup', style: { marginTop: '8px' }, onclick: () => openWebLookup(ctx, q) }, icon('search', 18), `Look up “${q}” with Google AI`));
   }
 
   async function runOnline(q) {
@@ -283,9 +286,9 @@ export function openQuickAdd(ctx, name = '') {
  * Create or edit a food (values per 100 g). Used for manual entry and label photos.
  * initial may include per100, name, brand, portions, suspicious[], basisNote.
  */
-export function openFoodForm({ ctx = null, initial = {}, onSaved = null, src = null, conf = null, warnings = [], photo = null, refText = null } = {}) {
+export function openFoodForm({ ctx = null, initial = {}, onSaved = null, src = null, conf = null, warnings = [], photo = null, refText = null, title = null } = {}) {
   const editing = !!initial.userFood;
-  const sheet = openSheet({ title: editing ? 'Edit food' : src === 'label' ? 'Check label values' : 'New food' });
+  const sheet = openSheet({ title: title || (editing ? 'Edit food' : src === 'label' ? 'Check label values' : 'New food') });
   const b = sheet.body;
   const nm = h('input', { type: 'text', value: initial.name || '', placeholder: 'e.g. Haldiram Moong Dal', maxlength: '100' });
   const brand = h('input', { type: 'text', value: initial.brand || '', placeholder: 'optional', maxlength: '60' });
@@ -308,7 +311,7 @@ export function openFoodForm({ ctx = null, initial = {}, onSaved = null, src = n
 
   if (photo) b.append(h('img.photo-preview', { src: photo, alt: 'Your label photo' }));
   for (const w of warnings) b.append(h('div.banner', {}, w));
-  if (src === 'label') b.append(h('div.hint', { style: { marginBottom: '12px' } }, 'Values read from your picture or text. Compare every number with the label and correct anything wrong. Highlighted fields look misread. Blank = unknown.'));
+  if (src === 'label' || src === 'web') b.append(h('div.hint', { style: { marginBottom: '12px' } }, 'Values read from your picture or text. Compare every number with the label and correct anything wrong. Highlighted fields look misread. Blank = unknown.'));
   b.append(field('Name', nm), field('Brand', brand),
     h('div.section-title', {}, 'Diet'), segmented([['veg', 'Vegetarian'], ['egg', 'Contains egg'], ['nonveg', 'Non-veg']], diet, (v) => { diet = v; }, { label: 'Diet' }),
     h('div.section-title', {}, 'Nutrition per 100 g (or 100 ml)'),

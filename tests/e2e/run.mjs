@@ -651,6 +651,60 @@ test('empty app: paste fallback box and backup file both work from the welcome s
   for (const x of [src, a, b, c]) await x.ctx.close();
 });
 
+test('REPORTED 27 Oct: pasting a table copied from a web page (label and number on separate lines) is read', async () => {
+  const { ctx, page } = await newCtx(); await open(page); await setupProfile(page);
+  await page.click('#tab-add'); await page.locator('.sheet.open #qa-picture').click(); await page.locator('.sheet.open #src-paste').click();
+  await page.fill('#paste-text', fs.readFileSync(path.join(ROOT, 'tests/fixtures/paste/div-grid.txt'), 'utf8'));
+  await page.click('#paste-read'); await page.waitForSelector('#food-save');
+  const s = page.locator('.sheet.open').last();
+  for (const [l, v] of [['Calories (kcal)', '127'], ['Protein (g)', '8.7'], ['Carbohydrates (g)', '22.8'], ['Total fat (g)', '0.5'], ['Fibre (g)', '6.4'], ['Sodium (mg)', '2'], ['Potassium (mg)', '405']]) eq(await s.getByLabel(l).inputValue(), v, l);
+  await ctx.close();
+});
+
+test('Google AI lookup: opens AI Mode inside the tap, resumes after returning from Safari, saves as Estimate', async () => {
+  const { ctx, page } = await newCtx(); await page.addInitScript(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+  await open(page); await setupProfile(page);
+  await page.click('#tab-add');
+  await page.locator('.sheet.open input[type=search]').fill('haldiram aloo bhujia'); await page.waitForTimeout(300);
+  await page.locator('.sheet.open #nomatch-lookup').click();
+  eq(await page.locator('#lookup-name').inputValue(), 'haldiram aloo bhujia', 'name carried over');
+  await page.click('#lookup-ai');
+  const opened = await page.evaluate(() => window.__opened);
+  eq(opened.length, 1, 'opened once, synchronously in the tap');
+  const u = new URL(opened[0]); eq(u.searchParams.get('udm'), '50', 'AI Mode'); assert(u.searchParams.get('q').includes('haldiram aloo bhujia'), 'question has the food');
+  await page.waitForTimeout(200);
+  eq((await appEval(page, () => window.__nl.store.meta('pendingLookup'))).name, 'haldiram aloo bhujia', 'pending saved');
+  // User goes to Safari; iOS closes the app; user comes back → paste step reopens by itself
+  await page.reload(); await page.waitForFunction(() => window.__nlReady);
+  await page.waitForSelector('#lookup-welcome-back');
+  await page.screenshot({ path: `${OUT}/lookup-return.png` });
+  await page.fill('#lookup-text', 'Here are the nutrition facts for Haldiram\'s Aloo Bhujia per 100 g:\n\nEnergy: 536 kcal\nProtein: 6.8 g\nCarbohydrate: 52.9 g\nTotal sugars: 2.6 g\nFibre: unknown\nFat: 33.2 g\nSaturated fat: 13.6 g\nSodium: 698 mg\nPotassium: unknown\nCalcium: unknown\nIron: unknown\n\nSource: Haldiram\'s product label.');
+  await page.click('#lookup-read'); await page.waitForSelector('#food-save');
+  const s = page.locator('.sheet.open').last();
+  eq(await s.getByLabel('Name', { exact: true }).inputValue(), 'haldiram aloo bhujia', 'name prefilled');
+  eq(await s.getByLabel('Calories (kcal)').inputValue(), '536', 'kcal'); eq(await s.getByLabel('Fibre (g)').inputValue(), '', 'unknown stays blank');
+  await page.screenshot({ path: `${OUT}/lookup-confirm.png` });
+  await s.locator('#food-save').click(); await page.waitForSelector('.sheet.open #add-to-diary');
+  const f = await appEval(page, () => window.__nl.userFoods[0]);
+  eq(f.conf, 'estimate', 'marked Estimate'); eq(f.src, 'web', 'source web');
+  eq(await appEval(page, () => window.__nl.store.meta('pendingLookup')), null, 'pending cleared');
+  await page.locator('.sheet.open #add-to-diary').click(); await page.waitForTimeout(300);
+  eq((await dayEntries(page)).length, 1, 'logged');
+  await ctx.close();
+});
+
+test('Google AI lookup: nonsense paste is rejected; plain Google search also available', async () => {
+  const { ctx, page } = await newCtx(); await page.addInitScript(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+  await open(page); await setupProfile(page);
+  await page.click('#tab-add'); await page.locator('.sheet.open #qa-picture').click(); await page.locator('.sheet.open #src-web').click();
+  await page.fill('#lookup-name', 'poha'); await page.click('#lookup-google');
+  assert(new URL(await page.evaluate(() => window.__opened[0])).searchParams.get('q').startsWith('poha nutrition'), 'plain search opened');
+  await page.fill('#lookup-text', 'I could not find that product, sorry.'); await page.click('#lookup-read');
+  await page.waitForSelector('#lookup-error');
+  eq(await appEval(page, () => window.__nl.userFoods.length), 0, 'nothing saved');
+  await ctx.close();
+});
+
 // ---------------------------------------------------------------- runner
 let failed = 0;
 for (const t of tests.filter((x) => x.name.includes(FILTER))) {

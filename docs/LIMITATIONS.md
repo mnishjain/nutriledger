@@ -7,7 +7,7 @@
 5. **Micronutrient coverage is partial.** USDA rows used here have no iron/calcium/potassium; IFCT has no vitamin B12; packaged foods vary. The app says “not enough data” rather than guessing.
 6. **Picture reading (OCR) is imperfect.** The app reads each picture up to 3 times at different sizes and cross-checks values against the label's calories, which fixed every error in our test images, but unusual layouts can still be misread. Crop screenshots to the nutrition table. Pasting the text from a web page is the most accurate option. **Label OCR detail:** on curved, glossy or small print. Values are always shown for confirmation and suspicious values are highlighted, but a plausible misread can still slip through if you don't compare with the label.
 7. **Open Food Facts** is crowd-sourced; Indian coverage is partial; searches are rate-limited (≈10/minute).
-8. **No general web search** for nutrition (not reliable without a paid service; risk of invented values).
+8. **Web/AI lookup is manual by design.** “Ask Google AI” opens Google AI Mode in Safari; you copy the answer back. AI answers can be wrong, so they are saved as Estimate. Google may change the AI Mode link (it then shows a normal search).
 9. **IFCT licence:** fine for personal use with attribution; commercial use needs NIN permission.
 10. **Not medical advice.** Targets are for healthy adults. Kidney disease, diabetes, pregnancy etc. need a doctor's targets.
 11. **Right after an update**, the old version may show for up to 10 minutes because GitHub Pages lets browsers reuse pages. Reopen later.

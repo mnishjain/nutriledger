@@ -153,6 +153,7 @@ export function chooseLabelSource(ctx, barcode = null) {
   sheet.body.append(h('div.group', {},
     opt('src-camera', 'camera', 'Take a photo of the label', 'Point the camera at the nutrition table on the pack.', () => { sheet.close(); scanLabel(ctx, barcode, { camera: true }); }),
     opt('src-library', 'down', 'Choose a photo or screenshot', 'For example a screenshot of a nutrition table from a website. Crop the screenshot to the table first for best results.', () => { sheet.close(); scanLabel(ctx, barcode, { camera: false }); }),
+    opt('src-web', 'search', 'Look it up on the web (Google AI)', 'Opens Google with the question written for you. Copy the answer, come back and paste.', async () => { sheet.close(); const { openWebLookup } = await import('./weblookup.js'); openWebLookup(ctx, ''); }),
     opt('src-paste', 'copy', 'Paste nutrition text', 'On a web page, select the nutrition table, Copy, and paste here. Most accurate: no text recognition needed.', () => { sheet.close(); pasteText(ctx, barcode); })),
   h('div.hint', {}, 'You will see every value before anything is saved. Values from websites are only as good as the website.'));
 }
@@ -162,7 +163,7 @@ function pasteText(ctx, barcode) {
   const ta = h('textarea', { rows: '10', id: 'paste-text', placeholder: 'Nutrition Facts\nServing size 1 cup (228g)\nCalories 250\nTotal Fat 12g\n…', style: { width: '100%', fontSize: '16px' } });
   const msg = h('div');
   sheet.body.append(ta, msg, h('button.btn.primary.block', { type: 'button', id: 'paste-read', style: { marginTop: '12px' }, onclick: async () => {
-    const r = parseLabel(ta.value);
+    const r = parseLabel(ta.value, { source: 'text' });
     clear(msg);
     if (r.found.length < 2) { msg.append(h('div.banner', {}, 'Could not find nutrition values in that text. Copy the whole table, including the numbers and units (g, mg, kcal).')); return; }
     const { openFoodForm } = await import('./add.js');

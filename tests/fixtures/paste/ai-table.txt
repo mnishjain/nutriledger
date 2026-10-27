@@ -1,0 +1,10 @@
+Nutrition per 100 g (cooked moong dal):
+
+Nutrient	Amount
+Energy	105 kcal
+Protein	7.0 g
+Carbohydrates	19.1 g
+Fat	0.4 g
+Fibre	7.6 g
+Sodium	2 mg
+Iron	1.4 mg
