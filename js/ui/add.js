@@ -73,10 +73,10 @@ export function openAdd(ctx) {
     clear(results);
     if (res.length) results.append(h('div.group', {}, res.map((r) => rowFor(r.f))));
     else results.append(h('div.card', {}, h('b', {}, `No match for “${q}” in your foods or the built-in database.`), h('div.hint', {}, 'Nothing is guessed. Search packaged foods online, scan the barcode or label, or enter it yourself.'),
-      h('button.btn.primary.block', { type: 'button', id: 'nomatch-lookup', style: { marginTop: '10px' }, onclick: () => openWebLookup(ctx, q) }, icon('search', 18), 'Look it up with Google AI'),
+      h('button.btn.primary.block', { type: 'button', id: 'nomatch-lookup', style: { marginTop: '10px' }, onclick: () => openWebLookup(ctx, q, { auto: true }) }, icon('search', 18), 'Look it up with AI'),
       h('div.btn-row', {}, h('button.btn', { type: 'button', onclick: () => openFoodForm({ ctx, initial: { name: q } }) }, 'Create food'), h('button.btn', { type: 'button', onclick: () => openQuickAdd(ctx, q) }, 'Quick add'))));
     online.append(h('button.btn.block', { type: 'button', id: 'search-online', onclick: () => runOnline(q) }, icon('search', 18), `Search packaged foods online for “${q}”`), h('div.hint', { style: { textAlign: 'center' } }, 'Uses Open Food Facts (free, crowd-sourced). Needs internet.'),
-      h('button.btn.block', { type: 'button', id: 'web-lookup', style: { marginTop: '8px' }, onclick: () => openWebLookup(ctx, q) }, icon('search', 18), `Look up “${q}” with Google AI`));
+      h('button.btn.block', { type: 'button', id: 'web-lookup', style: { marginTop: '8px' }, onclick: () => openWebLookup(ctx, q, { auto: true }) }, icon('search', 18), `Look up “${q}” with AI`));
   }
 
   async function runOnline(q) {

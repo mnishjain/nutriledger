@@ -8,6 +8,7 @@ import { NUTRIENTS, fmt, isNum } from '../core/nutrients.js';
 import { uid } from '../core/entries.js';
 import { SOURCES } from '../core/library.js';
 import { copyAllData, openBringData } from './transfer.js';
+import { testKey } from '../api/gemini.js';
 
 export async function renderMore(root) {
   clear(root);
@@ -31,6 +32,10 @@ export async function renderMore(root) {
   root.append(h('div.section-title', {}, 'Body weight'), h('div.group', {}, h('button.row', { type: 'button', id: 'log-weight', onclick: () => openWeight() }, icon('scale'), h('div.main', {}, h('div.title', {}, 'Log weight'), h('div.sub', {}, 'Weekly weigh-ins keep calorie targets accurate')))));
 
   const days = lastBackup ? Math.floor((Date.now() - lastBackup) / 86400000) : null;
+  const gem = await app.store.meta('gemini');
+  root.append(h('div.section-title', {}, 'Food lookup'), h('div.group', {},
+    h('button.row', { type: 'button', id: 'open-gemini', onclick: () => openGeminiSettings() }, icon('bolt'), h('div.main', {}, h('div.title', {}, 'Gemini lookup (one tap)'),
+      h('div.sub', {}, gem?.key ? `On · key …${gem.key.slice(-4)}${gem.model ? ` · ${gem.model}` : ''}` : 'Off · add your own free Gemini key')))));
   root.append(h('div.section-title', {}, 'Your data'), h('div.group', {},
     h('button.row', { type: 'button', id: 'open-backup', onclick: () => openBackup() }, icon('share'), h('div.main', {}, h('div.title', {}, 'Backup & restore'), h('div.sub', {}, lastBackup ? `Last backup ${days === 0 ? 'today' : `${days} day(s) ago`}` : 'Never backed up'))),
     h('button.row', { type: 'button', onclick: () => exportCsv() }, icon('down'), h('div.main', {}, h('div.title', {}, 'Export diary as spreadsheet (CSV)'), h('div.sub', {}, `${counts.entries} entries`))),
@@ -202,6 +207,47 @@ async function exportCsv() {
     lines.push([e.date, e.slot, q(i.name), q(i.portionLabel === 'grams' ? `${Math.round(i.grams)} g` : `${i.qty} x ${i.portionLabel}`), ...NUTRIENTS.map((x) => (isNum(i.n[x.key]) ? Number(i.n[x.key].toFixed(2)) : '')), q(i.source?.ref || i.source?.src), i.source?.conf || ''].join(','));
   }
   await shareFile(lines.join('\n'), `NutriLedger-${app.profile.name}-${localDate()}.csv`, 'text/csv');
+}
+
+function openGeminiSettings() {
+  const sheet = openSheet({ title: 'Gemini lookup' });
+  const b = sheet.body;
+  const status = h('div', { id: 'gemini-status' });
+  const keyIn = h('input', { type: 'password', id: 'gemini-key', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', placeholder: 'Paste your key (starts with AIza…)' });
+  const draw = async () => {
+    clear(status);
+    const g = await app.store.meta('gemini');
+    if (g?.key) status.append(h('div.banner', {}, h('b', {}, `Key saved: …${g.key.slice(-4)}`), g.testedAt ? `Last test OK on ${new Date(g.testedAt).toLocaleString('en-IN')}${g.model ? ` · model ${g.model}` : ''}.` : 'Not tested yet.',
+      h('div.actions', {}, h('button.btn.danger', { type: 'button', id: 'gemini-remove', onclick: async () => { await app.store.setMeta('gemini', null); toast('Gemini key removed from this phone'); draw(); refresh('more'); } }, 'Remove key'))));
+  };
+  b.append(
+    h('div.card', {}, h('h3', {}, 'What this does'),
+      h('p.small', {}, 'Type a food, tap once, and Gemini (with Google Search) fills in the nutrition per 100 g. You always check the values before they are saved, and they are marked Estimate.'),
+      h('p.small', {}, 'Your key is stored only on this phone. It is never put in backups, “Copy my data”, or the app’s public code. Only the food name you look up is sent to Google.'),
+      h('p.small', {}, 'Cost: free within Google’s free-tier limits. If the key’s Google project has billing switched on, Google may charge that project. On the free tier, Google may use the food questions to improve its products.')),
+    h('div.card', {}, h('h3', {}, 'Recommended: a separate key for this app'),
+      h('p.small', {}, 'A key from another project shares that project’s limits and billing. A separate key keeps them apart and can be deleted on its own:'),
+      h('ol.small', { style: { paddingLeft: '20px', margin: '6px 0 0' } },
+        h('li', {}, 'Open aistudio.google.com on your phone or computer and sign in.'),
+        h('li', {}, 'Tap “Get API key” → “Create API key” → “Create API key in new project”.'),
+        h('li', {}, 'Copy the key and paste it below.'))),
+    field('Gemini API key', keyIn),
+    h('button.btn.primary.block', { type: 'button', id: 'gemini-save', onclick: async () => {
+      const key = keyIn.value.trim();
+      if (!/^[A-Za-z0-9_-]{30,60}$/.test(key)) { keyIn.classList.add('bad'); toast('That does not look like a Gemini key (usually starts with AIza).', { tone: 'error', ms: 6000 }); return; }
+      clear(status); status.append(h('div.empty', { id: 'gemini-testing' }, 'Testing the key with Google…'));
+      try {
+        const r = await testKey(key);
+        await app.store.setMeta('gemini', { key, model: r.model, testedAt: Date.now() });
+        keyIn.value = ''; toast('Gemini key works and is saved on this phone'); await draw(); refresh('more');
+      } catch (e) {
+        clear(status);
+        status.append(h('div.banner.danger', { id: 'gemini-test-error' }, h('b', {}, e.message), e.detail ? h('div.hint', {}, `Google said: ${String(e.detail).slice(0, 240)}`) : null,
+          h('div.hint', {}, 'The key was not saved. If this message is unclear, send me a screenshot of it.')));
+      }
+    } }, 'Save and test key'),
+    status);
+  draw();
 }
 
 function openSources() {

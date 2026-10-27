@@ -124,7 +124,7 @@ button { cursor: pointer; }
 /* Forms */
 .field { margin: 0 0 14px; }
 .field label { display: block; font-size: 14px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
-input[type=text], input[type=search], input[type=date], input[type=number], select, textarea { width: 100%; font-size: 16px; padding: 12px 14px; border-radius: var(--radius-m); border: 1px solid var(--line); background: var(--card); min-height: 48px; -webkit-appearance: none; appearance: none; }
+input[type=text], input[type=password], input[type=search], input[type=date], input[type=number], select, textarea { width: 100%; font-size: 16px; padding: 12px 14px; border-radius: var(--radius-m); border: 1px solid var(--line); background: var(--card); min-height: 48px; -webkit-appearance: none; appearance: none; }
 input[type=date] { display: block; }
 input.bad { border-color: var(--chilli); background: var(--chilli-soft); }
 input.warn { border-color: var(--turmeric); background: var(--turmeric-soft); }

@@ -44,3 +44,11 @@ Read this first if you are a new session / another AI picking up the work.
 - New: "Look up on the web" (js/ui/weblookup.js): Ask Google AI → google.com/search?udm=50&q=<fixed-format prompt> (AI Mode, Gemini; udm param undocumented, falls back to normal search); Search Google; pending lookup stored and paste step auto-reopens when owner returns from Safari (30 min); values saved as conf 'estimate', src 'web'. window.open called synchronously inside the tap (Safari pop-up rule).
 - Not built (needs owner decision): one-tap Gemini API lookup (free key from Google AI Studio; free-tier prompts may be used by Google to improve products; limits).
 - Tests: 85 unit + 33 browser pass.
+
+## 27 Oct 2026 (later) — one-tap Gemini lookup with owner's own key
+- Owner has a Gemini API key from another project; asked to reuse it. Advised a separate key (Google: keys share project quota/billing; separate restricted keys recommended). App accepts either.
+- js/api/gemini.js: lists models (GET v1beta/models?key=) and picks newest stable "gemini-X-flash"; generateContent with tools [{google_search:{}}], temperature 0; falls back to no-search if the tool is rejected, and to another model on 404; reads candidates[].content.parts[].text and groundingMetadata.groundingChunks[].web; plain-English errors (invalid key, referrer restriction, API disabled, quota, network).
+- Key stored only in IndexedDB meta 'gemini' (never in exportAll/backups/Copy my data — tested). CSP connect-src allows generativelanguage.googleapis.com.
+- UI: More → Gemini lookup (Save and test key = one real listing call); "Look it up with AI" from no-match runs Gemini automatically when a key exists; result → food form, conf 'estimate', ref names model + sources.
+- LIMIT: sandbox cannot reach Google's API, so the real call is verified only by the owner's "Save and test key" + first lookup. Doc ambiguity noted: newer docs show an Interactions API (v1beta/interactions, tools [{type:'google_search'}]); generateContent kept as primary (not marked deprecated).
+- Tests: 92 unit + 37 browser pass.

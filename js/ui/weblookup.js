@@ -5,16 +5,12 @@ import { h, icon, openSheet, toast, clear, field, topSheet } from './dom.js';
 import { app } from './state.js';
 import { parseLabel } from '../core/labelparse.js';
 import { localDate } from '../core/dates.js';
+import { aiPrompt } from '../core/prompt.js';
+import { lookupNutrition } from '../api/gemini.js';
 
 const PENDING_MINUTES = 30;
 
-/** The question sent to Google. A fixed reply format makes the answer reliable to read. */
-export function aiPrompt(name) {
-  return `Nutrition facts for "${name}" per 100 g (per 100 ml if it is a drink), as sold or as eaten in India. `
-    + 'If it is a packaged product, use the manufacturer\'s label. Reply as a list in exactly this format, one per line, '
-    + 'writing "unknown" if not reliably known: Energy: _ kcal; Protein: _ g; Carbohydrate: _ g; Total sugars: _ g; '
-    + 'Fibre: _ g; Fat: _ g; Saturated fat: _ g; Sodium: _ mg; Potassium: _ mg; Calcium: _ mg; Iron: _ mg. Then name your source.';
-}
+export { aiPrompt };
 export function googleAiUrl(name) { return `https://www.google.com/search?udm=50&hl=en&q=${encodeURIComponent(aiPrompt(name))}`; }
 export function googleUrl(name) { return `https://www.google.com/search?hl=en&q=${encodeURIComponent(`${name} nutrition facts per 100g`)}`; }
 
@@ -31,7 +27,10 @@ export async function resumePendingLookup() {
   return true;
 }
 
-export function openWebLookup(ctx, name = '', { returning = false } = {}) {
+export async function geminiConfig() { return (await app.store.meta('gemini')) || null; }
+
+export async function openWebLookup(ctx, name = '', { returning = false, auto = false } = {}) {
+  const gcfg = await geminiConfig();
   const sheet = openSheet({ title: 'Look up on the web', onClose: () => {} });
   sheet.el.dataset.lookup = name;
   const b = sheet.body;
@@ -46,7 +45,7 @@ export function openWebLookup(ctx, name = '', { returning = false } = {}) {
     sheet.el.dataset.lookup = n;
     setPending({ name: n, at: Date.now(), date: ctx.date, slot: ctx.slot, kind }).catch(() => {});
   };
-  const read = async (text) => {
+  const read = async (text, { via = 'paste', sources = [], searched = true, model = '' } = {}) => {
     clear(out);
     const r = parseLabel(text, { source: 'text' });
     if (r.found.length < 2 || !Number.isFinite(r.per100.kcal)) {
@@ -60,12 +59,44 @@ export function openWebLookup(ctx, name = '', { returning = false } = {}) {
     sheet.close();
     const warnings = [...r.warnings];
     warnings.unshift('Values from the web or AI can be wrong. Compare with the product label when you can.');
-    openFoodForm({ ctx, initial: { name: n, per100: r.per100, suspicious: r.suspicious, servingG: r.servingG, portions: r.servingG ? [[`1 serving (${r.servingG} g)`, r.servingG]] : [] },
-      src: 'web', conf: 'estimate', refText: `Web/AI answer pasted by you on ${localDate()}, checked by you`, warnings, title: 'Check web values' });
+    if (via === 'gemini' && !searched) warnings.unshift('Gemini answered without a web search (not available for this key/model), from its own knowledge. Treat with extra care.');
+    if (via === 'gemini' && sources.length) warnings.push(`Sources Gemini used: ${sources.slice(0, 3).map((x) => x.title).join('; ')}`);
+    const refText = via === 'gemini'
+      ? `Gemini (${model})${searched ? ' with Google Search' : ''} on ${localDate()}${sources.length ? `; sources: ${sources.slice(0, 3).map((x) => x.title).join('; ')}` : ''}; checked by you`
+      : `Web/AI answer pasted by you on ${localDate()}, checked by you`;
+    openFoodForm({ ctx, initial: { name: n, per100: r.per100, suspicious: r.suspicious, servingG: r.servingG, url: sources[0]?.url || '', portions: r.servingG ? [[`1 serving (${r.servingG} g)`, r.servingG]] : [] },
+      src: 'web', conf: 'estimate', refText, warnings, title: via === 'gemini' ? 'Check Gemini values' : 'Check web values' });
+  };
+  const gem = h('div', { id: 'gemini-box' });
+  const runGemini = async () => {
+    const n = nm.value.trim();
+    if (!n) { nm.classList.add('bad'); toast('Type the food name first', { tone: 'error' }); return; }
+    clear(gem); clear(out);
+    gem.append(h('div.empty', { id: 'gemini-working' }, `Asking Gemini about “${n}”… (usually 5–15 seconds)`));
+    try {
+      const res = await lookupNutrition(n, gcfg, { onModel: (m) => { gcfg.model = m; app.store.setMeta('gemini', { ...gcfg, model: m }).catch(() => {}); } });
+      clear(gem);
+      const r = parseLabel(res.text, { source: 'text' });
+      if (r.found.length < 2 || !Number.isFinite(r.per100.kcal)) {
+        gem.append(h('div.banner', { id: 'gemini-nodata' }, h('b', {}, 'Gemini could not give reliable values for this food.'),
+          h('div.small', { style: { whiteSpace: 'pre-wrap', marginTop: '6px' } }, res.text.slice(0, 600)),
+          'Try a more specific name (brand + product), or use Ask Google AI / a label photo.'));
+        return;
+      }
+      await read(res.text, { via: 'gemini', sources: res.sources, searched: res.searched, model: res.model });
+    } catch (e) {
+      clear(gem);
+      gem.append(h('div.banner.danger', { id: 'gemini-error' }, h('b', {}, e.message), e.detail ? h('div.hint', {}, `Google said: ${String(e.detail).slice(0, 200)}`) : null,
+        h('div.hint', {}, 'You can still use “Ask Google AI” below.')));
+    }
   };
   b.append(
     returning ? h('div.banner', { id: 'lookup-welcome-back' }, h('b', {}, `Welcome back. Paste the answer for “${name}”.`)) : null,
     field('Food name', nm),
+    gcfg?.key ? h('div', {},
+      h('button.btn.primary.block', { type: 'button', id: 'lookup-gemini', onclick: runGemini }, icon('bolt', 18), 'Look up with Gemini (one tap)'),
+      h('div.hint', {}, 'Uses your own Gemini key with Google Search. You check every value before saving.'), gem,
+      h('div.section-title', { style: { marginTop: '18px' } }, 'Or do it yourself in Safari')) : h('div.hint', { id: 'gemini-tip', style: { margin: '-4px 0 8px' } }, 'Tip: add your Gemini key in More → Gemini lookup for one-tap lookups.'),
     h('div.section-title', {}, '1. Look it up'),
     h('div.btn-row', {},
       h('button.btn.primary', { type: 'button', id: 'lookup-ai', onclick: () => go('ai') }, icon('search', 18), 'Ask Google AI'),
@@ -83,5 +114,6 @@ export function openWebLookup(ctx, name = '', { returning = false } = {}) {
     h('button.btn.block', { type: 'button', id: 'lookup-read', style: { marginTop: '8px' }, onclick: () => read(ta.value) }, 'Read values'),
     out);
   if (!name) setTimeout(() => nm.focus(), 250);
+  else if (auto && gcfg?.key && !returning) runGemini();
   return sheet;
 }
