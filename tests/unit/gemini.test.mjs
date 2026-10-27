@@ -1,7 +1,7 @@
 // Gemini lookup logic against simulated Google responses (shapes from ai.google.dev API reference).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pickModel, explainError, readResponse, lookupNutrition, testKey } from '../../js/api/gemini.js';
+import { pickModel, explainError, readResponse, lookupNutrition, testKey, cleanKey } from '../../js/api/gemini.js';
 import { parseLabel } from '../../js/core/labelparse.js';
 
 const KEY = 'AIzaSyTEST_KEY_1234567890abcdefghijk';
@@ -33,7 +33,8 @@ test('one-tap lookup: correct request (key, model, Google Search tool, prompt) a
   const out = await lookupNutrition('haldiram aloo bhujia', { key: KEY }, { fetchImpl: f });
   const gen = f.calls.find((c) => c.url.includes(':generateContent'));
   assert.ok(gen.url.includes('/models/gemini-3.8-flash:generateContent'));
-  assert.ok(gen.url.includes(`key=${KEY}`));
+  assert.equal(gen.init.headers['x-goog-api-key'], KEY, 'key sent in header');
+  assert.ok(!gen.url.includes(KEY), 'key not in the web address');
   assert.deepEqual(gen.body.tools, [{ google_search: {} }]);
   assert.ok(gen.body.contents[0].parts[0].text.includes('"haldiram aloo bhujia"'));
   assert.equal(gen.body.generationConfig.temperature, 0);
@@ -82,4 +83,42 @@ test('Test my key: real listing call, picks model, explains bad keys', async () 
   assert.equal(ok.model, 'gemini-3.8-flash');
   await assert.rejects(testKey(KEY, { fetchImpl: fakeFetch([[/\/models\?/, () => res(400, { error: { message: 'API key not valid.' } })]]) }), (e) => e.code === 'key');
   await assert.rejects(testKey(KEY, { fetchImpl: fakeFetch([[/\/models\?/, () => res(200, { models: [{ name: 'models/gemini-embedding-2' }] })]]) }), (e) => e.code === 'model');
+});
+
+const AQ = 'AQ.Ab8RN6IdX1k2YpQ_example-Key.with.dots_0123456789abcdef';
+
+test('new "AQ." keys: accepted, spaces/line breaks removed, junk rejected', () => {
+  assert.equal(cleanKey(AQ), AQ);
+  assert.equal(cleanKey(` ${AQ.slice(0, 20)}\n${AQ.slice(20)} `), AQ, 'pasted with a line break');
+  assert.equal(cleanKey(KEY), KEY, 'old AIza keys still accepted');
+  assert.equal(cleanKey('AQ.'), null); assert.equal(cleanKey('my key is AQ.Ab8RN6!'), null);
+});
+
+test('AQ. key: if Google rejects the header method, retries with ?key= and remembers it', async () => {
+  const f = fakeFetch([[/\/models/, (u, init) => (init.headers?.['x-goog-api-key'] ? res(401, { error: { code: 401, message: 'Request had invalid authentication credentials.', status: 'UNAUTHENTICATED', details: [{ reason: 'ACCESS_TOKEN_TYPE_UNSUPPORTED' }] } }) : res(200, MODELS))]]);
+  const r = await testKey(AQ, { fetchImpl: f });
+  assert.equal(r.auth, 'query'); assert.equal(r.model, 'gemini-3.8-flash');
+  assert.ok(f.calls[1].url.includes(`key=${encodeURIComponent(AQ)}`));
+  const g = fakeFetch([[/:generateContent/, (u, init) => (u.includes('key=') ? res(200, ANSWER) : res(401, { error: { status: 'UNAUTHENTICATED' } }))]]);
+  const out = await lookupNutrition('x', { key: AQ, model: 'gemini-3.8-flash', auth: 'query' }, { fetchImpl: g });
+  assert.equal(g.calls.length, 1, 'remembered method used first'); assert.equal(out.auth, 'query');
+});
+
+test('AQ. key: header works first time (no extra call)', async () => {
+  const f = fakeFetch([[/\/models/, (u, init) => (init.headers?.['x-goog-api-key'] === AQ && !u.includes('key=') ? res(200, MODELS) : res(400, {}))]]);
+  const r = await testKey(AQ, { fetchImpl: f });
+  assert.equal(r.auth, 'header'); assert.equal(f.calls.length, 1);
+});
+
+test('a genuinely wrong key still says "not valid" after trying both ways', async () => {
+  const f = fakeFetch([[/\/models/, () => res(400, { error: { message: 'API key not valid. Please pass a valid API key.', details: [{ reason: 'API_KEY_INVALID' }] } })]]);
+  await assert.rejects(testKey(AQ, { fetchImpl: f }), (e) => e.code === 'key' && /not valid/.test(e.message));
+  assert.equal(f.calls.length, 2);
+});
+
+test('saved model misbehaving for this key → retries an older proven model once', async () => {
+  const f = fakeFetch([[/gemini-3\.8-flash:generateContent/, () => res(400, { error: { code: 400, message: 'Request contains an invalid argument.' } })], [/gemini-2\.5-flash:generateContent/, () => res(200, ANSWER)]]);
+  const changes = [];
+  const out = await lookupNutrition('x', { key: AQ, model: 'gemini-3.8-flash' }, { fetchImpl: f, onModel: (m) => changes.push(m) });
+  assert.equal(out.model, 'gemini-2.5-flash'); assert.deepEqual(changes, ['gemini-2.5-flash']);
 });

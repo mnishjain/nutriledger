@@ -74,7 +74,8 @@ export async function openWebLookup(ctx, name = '', { returning = false, auto = 
     clear(gem); clear(out);
     gem.append(h('div.empty', { id: 'gemini-working' }, `Asking Gemini about “${n}”… (usually 5–15 seconds)`));
     try {
-      const res = await lookupNutrition(n, gcfg, { onModel: (m) => { gcfg.model = m; app.store.setMeta('gemini', { ...gcfg, model: m }).catch(() => {}); } });
+      const res = await lookupNutrition(n, gcfg, { onModel: (m, a) => { gcfg.model = m; if (a) gcfg.auth = a; app.store.setMeta('gemini', { ...gcfg }).catch(() => {}); } });
+      if (res.auth && res.auth !== gcfg.auth) { gcfg.auth = res.auth; app.store.setMeta('gemini', { ...gcfg }).catch(() => {}); }
       clear(gem);
       const r = parseLabel(res.text, { source: 'text' });
       if (r.found.length < 2 || !Number.isFinite(r.per100.kcal)) {

@@ -712,7 +712,7 @@ const GANSWER = { candidates: [{ content: { parts: [{ text: 'Per 100 g:\nEnergy:
 async function mockGemini(page, { gen = () => ({ status: 200, json: GANSWER }), list = () => ({ status: 200, json: GMODELS }) } = {}) {
   const seen = [];
   await page.route('https://generativelanguage.googleapis.com/**', async (r) => {
-    const u = r.request().url(); seen.push({ url: u, body: r.request().postData() });
+    const u = r.request().url(); seen.push({ url: u, body: r.request().postData(), key: r.request().headers()['x-goog-api-key'] });
     const x = u.includes(':generateContent') ? gen(u) : list(u);
     await r.fulfill({ status: x.status, contentType: 'application/json', body: JSON.stringify(x.json) });
   });
@@ -728,7 +728,7 @@ test('Gemini: key saved after a real test call; never included in backups or Cop
   await open(page); await setupProfile(page); const seen = await mockGemini(page);
   await saveKey(page);
   await page.waitForSelector('#gemini-status .banner:has-text("Key saved")');
-  assert(seen.some((c) => c.url.includes('/v1beta/models?') && c.url.includes(GKEY)), 'test call made');
+  assert(seen.some((c) => c.url.includes('/v1beta/models?') && c.key === GKEY), 'test call made with key in header');
   eq((await appEval(page, () => window.__nl.store.meta('gemini'))).model, 'gemini-3.8-flash', 'model chosen');
   await page.screenshot({ path: `${OUT}/gemini-settings.png` });
   const backup = JSON.stringify(await appEval(page, () => window.__nl.store.exportAll()));
@@ -737,6 +737,17 @@ test('Gemini: key saved after a real test call; never included in backups or Cop
   await page.click('#open-backup'); await page.click('#copy-data');
   await page.waitForFunction(() => /Copied/.test(document.querySelector('#toast')?.textContent || ''));
   assert(!(await page.evaluate(() => navigator.clipboard.readText())).includes(GKEY), 'key not in Copy my data');
+  await ctx.close();
+});
+
+test('Gemini: new-format "AQ." key (with dots, pasted with a line break) is accepted and works', async () => {
+  const AQK = 'AQ.Ab8RN6IdX1k2YpQ_example-Key.with.dots_0123456789abcdef';
+  const { ctx, page } = await newCtx(); await open(page); await setupProfile(page); const seen = await mockGemini(page);
+  await saveKey(page, `${AQK.slice(0, 25)}\n${AQK.slice(25)}`);
+  await page.waitForSelector('#gemini-status .banner:has-text("Key saved")');
+  const g = await appEval(page, () => window.__nl.store.meta('gemini'));
+  eq(g.key, AQK, 'stored without the line break'); eq(g.auth, 'header', 'header method works');
+  assert(seen.every((c) => !c.url.includes('AQ.')), 'key never placed in the web address');
   await ctx.close();
 });
 
