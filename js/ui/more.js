@@ -8,7 +8,7 @@ import { NUTRIENTS, fmt, isNum } from '../core/nutrients.js';
 import { uid } from '../core/entries.js';
 import { SOURCES } from '../core/library.js';
 import { copyAllData, openBringData } from './transfer.js';
-import { testKey } from '../api/gemini.js';
+import { testKey, cleanKey } from '../api/gemini.js';
 
 export async function renderMore(root) {
   clear(root);
@@ -213,7 +213,7 @@ function openGeminiSettings() {
   const sheet = openSheet({ title: 'Gemini lookup' });
   const b = sheet.body;
   const status = h('div', { id: 'gemini-status' });
-  const keyIn = h('input', { type: 'password', id: 'gemini-key', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', placeholder: 'Paste your key (starts with AIza…)' });
+  const keyIn = h('input', { type: 'password', id: 'gemini-key', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', placeholder: 'Paste your key (starts with AQ. or AIza)' });
   const draw = async () => {
     clear(status);
     const g = await app.store.meta('gemini');
@@ -233,12 +233,13 @@ function openGeminiSettings() {
         h('li', {}, 'Copy the key and paste it below.'))),
     field('Gemini API key', keyIn),
     h('button.btn.primary.block', { type: 'button', id: 'gemini-save', onclick: async () => {
-      const key = keyIn.value.trim();
-      if (!/^[A-Za-z0-9_-]{30,60}$/.test(key)) { keyIn.classList.add('bad'); toast('That does not look like a Gemini key (usually starts with AIza).', { tone: 'error', ms: 6000 }); return; }
+      const key = cleanKey(keyIn.value);
+      if (!key) { keyIn.classList.add('bad'); toast('That does not look like a whole Gemini key. Copy it again (it starts with AQ. or AIza).', { tone: 'error', ms: 7000 }); return; }
+      keyIn.classList.remove('bad');
       clear(status); status.append(h('div.empty', { id: 'gemini-testing' }, 'Testing the key with Google…'));
       try {
         const r = await testKey(key);
-        await app.store.setMeta('gemini', { key, model: r.model, testedAt: Date.now() });
+        await app.store.setMeta('gemini', { key, model: r.model, auth: r.auth, testedAt: Date.now() });
         keyIn.value = ''; toast('Gemini key works and is saved on this phone'); await draw(); refresh('more');
       } catch (e) {
         clear(status);

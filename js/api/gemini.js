@@ -16,6 +16,7 @@ export function explainError(status, body) {
   const msg = body?.error?.message || '';
   const reason = JSON.stringify(body?.error?.details || '') + msg;
   if (status === 400 && /API[_ ]KEY[_ ]INVALID|API key not valid/i.test(reason)) return new GeminiError('key', 'This Gemini key is not valid. Copy it again from Google AI Studio.', msg);
+  if (status === 401 || /ACCESS_TOKEN_TYPE_UNSUPPORTED|UNAUTHENTICATED/i.test(reason)) return new GeminiError('auth', 'Google did not accept the key in this form.', msg);
   if (status === 403 && /referer|referrer/i.test(reason)) return new GeminiError('restricted', 'The key is restricted to other websites. In Google AI Studio / Cloud Console, allow mnishjain.github.io/* for this key, or use a separate key.', msg);
   if (status === 403 && /(has not been used|disabled|not enabled|SERVICE_DISABLED)/i.test(reason)) return new GeminiError('disabled', 'The Gemini API is not enabled for this key’s project. Create the key in Google AI Studio, which enables it automatically.', msg);
   if (status === 403) return new GeminiError('denied', 'Google refused this key (permission denied). Check the key’s restrictions in Google AI Studio.', msg);
@@ -39,6 +40,34 @@ async function call(fetchImpl, url, init = {}) {
   return body;
 }
 
+/**
+ * Call with the key either in the x-goog-api-key header (Google's SDK default; needed by new "AQ." keys
+ * in some setups, and keeps the key out of URLs) or as ?key= (classic). Tries the saved/preferred way first,
+ * then the other way once if Google rejects the method. Returns { body, auth }.
+ */
+async function authed(fetchImpl, path, init, key, prefer = 'header') {
+  const go = (mode) => {
+    const sep = path.includes('?') ? '&' : '?';
+    const url = mode === 'query' ? `${BASE}${path}${sep}key=${encodeURIComponent(key)}` : `${BASE}${path}`;
+    const headers = { ...(init.headers || {}), ...(mode === 'header' ? { 'x-goog-api-key': key } : {}) };
+    return call(fetchImpl, url, { ...init, headers }).then((body) => ({ body, auth: mode }));
+  };
+  const first = prefer === 'query' ? 'query' : 'header';
+  const second = first === 'header' ? 'query' : 'header';
+  try { return await go(first); }
+  catch (e) {
+    if (!['auth', 'key', 'network'].includes(e.code)) throw e;
+    try { return await go(second); }
+    catch (e2) { throw (e.code === 'key' && e2.code !== 'network') ? e2 : (e2.code === 'network' ? e : e2); }
+  }
+}
+
+/** Remove spaces/line breaks people paste by accident. Returns null if it cannot be a Google key. */
+export function cleanKey(raw) {
+  const k = String(raw || '').replace(/\s+/g, '');
+  return /^[A-Za-z0-9._-]{20,300}$/.test(k) ? k : null;
+}
+
 /** Choose the newest stable "Flash" model that supports generateContent (names change over time). */
 export function pickModel(models) {
   const ok = (m) => {
@@ -52,9 +81,11 @@ export function pickModel(models) {
   return scored[0]?.n || null;
 }
 
-export async function listModels(key, { fetchImpl = globalThis.fetch } = {}) {
-  const body = await call(fetchImpl, `${BASE}/models?pageSize=1000&key=${encodeURIComponent(key)}`);
-  return body?.models || [];
+export async function listModels(key, { fetchImpl = globalThis.fetch, auth } = {}) {
+  const { body, auth: used } = await authed(fetchImpl, '/models?pageSize=1000', {}, key, auth);
+  const models = body?.models || [];
+  models.auth = used;
+  return models;
 }
 
 /** Extract answer text and web sources from a generateContent response. */
@@ -82,29 +113,37 @@ const isToolError = (e) => e instanceof GeminiError && e.code === 'http' && /too
  */
 export async function lookupNutrition(name, cfg, { fetchImpl = globalThis.fetch, onModel = null } = {}) {
   if (!cfg?.key) throw new GeminiError('nokey', 'Add your Gemini key first (More → Gemini lookup).');
+  let auth = cfg.auth || 'header';
   let model = cfg.model;
   if (!model) {
-    try { model = pickModel(await listModels(cfg.key, { fetchImpl })) || FALLBACK_MODELS[0]; }
-    catch (e) { if (['key', 'restricted', 'disabled', 'denied', 'network'].includes(e.code)) throw e; model = FALLBACK_MODELS[0]; }
-    onModel?.(model);
+    try { const ms = await listModels(cfg.key, { fetchImpl, auth }); auth = ms.auth; model = pickModel(ms) || FALLBACK_MODELS[0]; }
+    catch (e) { if (['key', 'auth', 'restricted', 'disabled', 'denied', 'network'].includes(e.code)) throw e; model = FALLBACK_MODELS[0]; }
+    onModel?.(model, auth);
   }
   const prompt = `${aiPrompt(name)} Use Google Search to check current, reliable sources (manufacturer, IFCT/NIN, USDA).`;
-  const req = (withSearch) => call(fetchImpl, `${BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(cfg.key)}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      ...(withSearch ? { tools: [{ google_search: {} }] } : {}),
-      generationConfig: { temperature: 0 },
-    }),
-  });
+  const req = async (m, withSearch) => {
+    const r = await authed(fetchImpl, `/models/${encodeURIComponent(m)}:generateContent`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        ...(withSearch ? { tools: [{ google_search: {} }] } : {}),
+        generationConfig: { temperature: 0 },
+      }),
+    }, cfg.key, auth);
+    auth = r.auth; return r.body;
+  };
   let body; let searched = true;
-  try { body = await req(true); }
+  try { body = await req(model, true); }
   catch (e) {
-    if (e.code === 'model' && !cfg.model) { model = FALLBACK_MODELS[1]; onModel?.(model); body = await req(true); }
-    else if (isToolError(e)) { searched = false; body = await req(false); }
-    else throw e;
+    if (isToolError(e)) { searched = false; body = await req(model, false); }
+    else if (['model', 'server', 'http'].includes(e.code)) {
+      // The chosen model may be unavailable or misbehaving for this key: try a proven older model once
+      const alt = FALLBACK_MODELS.find((x) => x !== model);
+      try { body = await req(alt, true); model = alt; onModel?.(model, auth); }
+      catch (e2) { if (isToolError(e2)) { searched = false; body = await req(alt, false); model = alt; onModel?.(model, auth); } else throw e; }
+    } else throw e;
   }
-  return { ...readResponse(body), model, searched };
+  return { ...readResponse(body), model, searched, auth };
 }
 
 /** A real, cheap call used by "Test my key": lists models and picks one. No search quota is used. */
@@ -112,5 +151,5 @@ export async function testKey(key, { fetchImpl = globalThis.fetch } = {}) {
   const models = await listModels(key, { fetchImpl });
   const model = pickModel(models);
   if (!model) throw new GeminiError('model', 'The key works, but no suitable Gemini Flash model is available to it.', models.map((m) => m.name).slice(0, 8).join(', '));
-  return { model, count: models.length };
+  return { model, count: models.length, auth: models.auth };
 }

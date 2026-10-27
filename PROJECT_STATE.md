@@ -52,3 +52,8 @@ Read this first if you are a new session / another AI picking up the work.
 - UI: More → Gemini lookup (Save and test key = one real listing call); "Look it up with AI" from no-match runs Gemini automatically when a key exists; result → food form, conf 'estimate', ref names model + sources.
 - LIMIT: sandbox cannot reach Google's API, so the real call is verified only by the owner's "Save and test key" + first lookup. Doc ambiguity noted: newer docs show an Interactions API (v1beta/interactions, tools [{type:'google_search'}]); generateContent kept as primary (not marked deprecated).
 - Tests: 92 unit + 37 browser pass.
+
+## 27 Oct 2026 17:45 — owner's key starts with "AQ."
+- Cause: app's key check only allowed [A-Za-z0-9_-] (old AIza keys); Google's new default Auth keys are "AQ.Ab…" with dots.
+- Fix: cleanKey() accepts 20–300 chars of [A-Za-z0-9._-], strips pasted spaces/line breaks; key now sent in x-goog-api-key header (Google SDK default; keeps key out of URLs), with automatic retry using ?key= if Google rejects the method (401 UNAUTHENTICATED / ACCESS_TOKEN_TYPE_UNSUPPORTED) or the request fails; working method saved (meta gemini.auth). Saved model misbehaving → one retry with gemini-2.5-flash.
+- Tests: 97 unit + 38 browser (1 flaky timing in a full run; 3/3 on rerun).
