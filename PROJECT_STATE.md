@@ -36,3 +36,11 @@ Read this first if you are a new session / another AI picking up the work.
 - Fix (deployed): welcome screen for empty app with "Bring my data from Safari" (clipboard paste or backup file) and no forced profile; tab bar hidden until data exists; Safari banner with one-tap "Copy my data" whenever Safari holds entries; Copy/Paste also in More → Backup & restore. Clipboard write uses ClipboardItem with a Promise inside the tap (Safari requires the write to start within the tap).
 - New e2e test reproduces the incident with two separate storages. 71 unit + 30 browser tests pass.
 - Open decision for owner: automatic cloud backup (free, needs his account) so the phone is never the only copy.
+
+## 27 Oct 2026 — pasted text not read; web/AI lookup
+- Owner report: pasting a nutrition table/text was "not reading". Reproduced: copied web tables put label and value on separate lines (1/5 values read); AI prose was mis-assigned (each value shifted to the next nutrient).
+- Fix: token-based reader (js/core/labelparse.js): nutrient words + numbers in order; forward vs backward assignment chosen by unit fit + calorie checksum; units in labels ("Energy (kJ)"); basis numbers excluded ("per 100 g", "(240 g)", "8 servings"); ranges → midpoint with warning; thousands separators; bare "120 Cal"; prose serving weights. OCR-only repairs disabled for pasted text (source:'text').
+- Fixtures: tests/fixtures/paste/*.txt generated with a real browser copy algorithm (Chromium selection.toString()) from 9 typical layouts.
+- New: "Look up on the web" (js/ui/weblookup.js): Ask Google AI → google.com/search?udm=50&q=<fixed-format prompt> (AI Mode, Gemini; udm param undocumented, falls back to normal search); Search Google; pending lookup stored and paste step auto-reopens when owner returns from Safari (30 min); values saved as conf 'estimate', src 'web'. window.open called synchronously inside the tap (Safari pop-up rule).
+- Not built (needs owner decision): one-tap Gemini API lookup (free key from Google AI Studio; free-tier prompts may be used by Google to improve products; limits).
+- Tests: 85 unit + 33 browser pass.

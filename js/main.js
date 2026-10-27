@@ -7,6 +7,7 @@ import { renderInsights } from './ui/insights.js';
 import { renderMore, editProfile, exportBackup } from './ui/more.js';
 import { openAdd } from './ui/add.js';
 import { openBringData, copyAllData, isIOS, isStandalone } from './ui/transfer.js';
+import { resumePendingLookup } from './ui/weblookup.js';
 import { slotForTime, localDate } from './core/dates.js';
 
 const root = $('#app');
@@ -137,7 +138,12 @@ async function boot() {
     if (legacy?.status === 'unreadable') toast('Old data could not be read. It was kept safe – see More → Backup.', { tone: 'error', ms: 9000 });
   }
   // Keep "today" correct across midnight and app resumes
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && syncToday()) render(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (syncToday()) render();
+    resumePendingLookup().catch(() => {});
+  });
+  resumePendingLookup().catch(() => {}); // app was closed while the user was in Safari
   setInterval(() => { if (syncToday()) render(); }, 60000);
   window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (['today', 'meals', 'insights', 'more'].includes(t) && t !== app.tab) { app.tab = t; render(); } });
   app.store.onChange(() => {});

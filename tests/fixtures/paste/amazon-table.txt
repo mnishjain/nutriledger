@@ -1,0 +1,12 @@
+Nutrition Information
+Nutrient	Per 100 g	Per serving (30 g)	%RDA*
+Energy (kcal)	532	160	8%
+Protein (g)	22.0	6.6	
+Carbohydrate (g)	38.0	11.4	
+of which Total Sugars (g)	2.0	0.6	
+Added Sugars (g)	0.0	0.0	0%
+Dietary Fibre (g)	6.0	1.8	
+Total Fat (g)	34.0	10.2	15%
+Saturated Fat (g)	15.0	4.5	20%
+Trans Fat (g)	0.1	0.03	
+Sodium (mg)	820	246	12%

@@ -200,6 +200,7 @@ const SOURCES = {
   recipe: { label: 'Recipe estimate', long: 'Computed from ingredient values using stated recipe assumptions', url: '' },
   off: { label: 'Open Food Facts', long: 'Open Food Facts (crowd-sourced, ODbL)', url: 'https://world.openfoodfacts.org/' },
   user: { label: 'You', long: 'Entered or confirmed by you', url: '' },
+  web: { label: 'Web/AI', long: 'Copied from a web page or AI answer and checked by you (can be wrong)', url: '' },
   legacy: { label: 'Old app', long: 'Migrated from NutriLedger v2 (values were not sourced)', url: '' },
 };
 
