@@ -57,3 +57,10 @@ Read this first if you are a new session / another AI picking up the work.
 - Cause: app's key check only allowed [A-Za-z0-9_-] (old AIza keys); Google's new default Auth keys are "AQ.Ab…" with dots.
 - Fix: cleanKey() accepts 20–300 chars of [A-Za-z0-9._-], strips pasted spaces/line breaks; key now sent in x-goog-api-key header (Google SDK default; keeps key out of URLs), with automatic retry using ?key= if Google rejects the method (401 UNAUTHENTICATED / ACCESS_TOKEN_TYPE_UNSUPPORTED) or the request fails; working method saved (meta gemini.auth). Saved model misbehaving → one retry with gemini-2.5-flash.
 - Tests: 97 unit + 38 browser (1 flaky timing in a full run; 3/3 on rerun).
+
+## 13 Nov 2026 — could not switch back to own profile; wife on Samsung Galaxy Z Fold 3
+- Owner report: after adding a profile for his wife he could not get back to his own. Cause (design flaw): in More, tapping a profile's NAME opened Edit; switching only worked via the small initials circle; the Today avatar only jumped to More.
+- Fix: Today avatar opens a "Whose diary?" switcher (tick on active, tap to switch, Add, Edit); with 2+ profiles Today shows a "<name>'s diary · Switch" pill; in More tapping a name switches (tapping the active one edits), pencil always edits.
+- Wife uses her own phone (Galaxy Z Fold 3): she opens the link in Chrome and taps "I'm new". Data stays on her phone. The "Wife" profile on the owner's iPhone is separate; deleting it does not affect her phone.
+- Android: installed web app shares storage with Chrome (unlike iPhone); Samsung Internet keeps separate storage, so advise Chrome. Added: beforeinstallprompt → More → "Install as an app" and an Android tip banner (dismiss 30 days); platform-aware backup wording (Chrome cannot share .json files via Web Share, so backups download to Downloads → copy to Google Drive). Removed manifest "orientation: portrait" (would letterbox/lock on the unfolded Fold).
+- Tests: 97 unit + 40 browser (new: switching from header/More; Android UA at 280/884/1104 px, install prompt, backup download). Fold CSS widths are approximate; not tested on a real Samsung.

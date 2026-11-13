@@ -204,3 +204,17 @@ body.sheet-open .toast { bottom: auto; top: calc(env(safe-area-inset-top) + 60px
 .progress { height: 6px; background: var(--fill); border-radius: 3px; overflow: hidden; }
 .progress span { display: block; height: 100%; background: var(--slate); transition: width .2s; }
 .photo-preview { max-width: 100%; max-height: 240px; border-radius: var(--radius-m); display: block; margin: 0 auto 12px; }
+
+/* Profiles: tap name to switch; pencil edits */
+.profile-row { padding: 0 8px 0 0; gap: 4px; }
+.profile-pick { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 60px; padding: 10px 8px 10px 16px; border: 0; background: none; text-align: left; color: inherit; font: inherit; }
+.profile-pick:active { background: var(--fill); }
+.profile-pick .avatar { display: inline-grid; place-items: center; }
+.profile-pick .avatar.off { background: var(--fill); color: var(--ink); }
+.profile-row.active .title { color: var(--ink); }
+.profile-pick .tick { color: var(--slate); flex: none; display: inline-grid; }
+.profile-pill { margin: -2px 0 10px; max-width: 100%; }
+.profile-pill span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.profile-pill .switch { color: var(--slate); font-weight: 700; padding-left: 8px; border-left: 1px solid var(--line); }
+ol.steps { padding-left: 22px; line-height: 1.5; }
+ol.steps li { margin: 6px 0; }

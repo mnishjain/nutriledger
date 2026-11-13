@@ -4,9 +4,9 @@ import { openDB, requestPersistence, importFromSiblingDb } from './store/db.js';
 import { renderToday } from './ui/today.js';
 import { renderMeals } from './ui/meals.js';
 import { renderInsights } from './ui/insights.js';
-import { renderMore, editProfile, exportBackup } from './ui/more.js';
+import { renderMore, editProfile, exportBackup, installEntry } from './ui/more.js';
 import { openAdd } from './ui/add.js';
-import { openBringData, copyAllData, isIOS, isStandalone } from './ui/transfer.js';
+import { openBringData, copyAllData, isIOS, isAndroid, isStandalone } from './ui/transfer.js';
 import { resumePendingLookup } from './ui/weblookup.js';
 import { slotForTime, localDate } from './core/dates.js';
 
@@ -51,12 +51,19 @@ async function banners() {
     'In Safari tap ••• (bottom right) → Share → scroll down → “Add to Home Screen” → keep “Open as Web App” on → Add. Then use only the new icon. ',
     'Data in Safari and in the Home Screen app is kept separately by iPhone.',
     h('div.actions', {}, h('button.btn', { type: 'button', onclick: () => dismiss('safari') }, 'Got it'))));
+  if (!ios && !standalone && isAndroid() && c.entries > 0 && !isOff('android', 30)) {
+    const row = installEntry();
+    box.append(h('div.banner', { id: 'android-banner' }, h('b', {}, 'Tip: install NutriLedger as an app'),
+      'Chrome: menu ⋮ → “Add to Home screen” / “Install app”. On Android the app keeps the same data as Chrome. Avoid Samsung Internet for this app: it keeps separate data.',
+      h('div.actions', {}, app.installPrompt && row ? h('button.btn.primary', { type: 'button', id: 'banner-install', onclick: () => row.click() }, 'Install') : null,
+        h('button.btn', { type: 'button', onclick: () => dismiss('android') }, 'Got it'))));
+  }
   const last = await app.store.meta('lastBackupAt', null);
   const first = await app.store.meta('firstUseAt', Date.now());
   const age = Date.now() - (last || first);
   const backupDays = ios && !standalone ? 3 : 7; // a Safari tab's data is at more risk than a Home Screen app's
   if (c.entries >= 5 && age > backupDays * 86400000 && !isOff('backup', 1)) box.append(h('div.banner', { id: 'backup-banner' }, h('b', {}, last ? `Last backup ${Math.floor(age / 86400000)} days ago` : 'You have not made a backup yet'),
-    'Your diary is stored only on this phone. Export a copy to iCloud Drive.',
+    ios ? 'Your diary is stored only on this phone. Export a copy to iCloud Drive.' : 'Your diary is stored only on this phone. Export a copy and keep it in Google Drive or Files.',
     h('div.actions', {}, h('button.btn.primary', { type: 'button', onclick: async () => { const r = await exportBackup(); if (r !== 'cancelled') render(); } }, 'Back up now'), h('button.btn', { type: 'button', onclick: () => dismiss('backup') }, 'Later'))));
   return box;
 }
@@ -171,5 +178,8 @@ function registerSW() {
 window.addEventListener('error', (e) => { if (e.message && !/ResizeObserver/.test(e.message)) toast(`Error: ${e.message}`, { tone: 'error', ms: 7000 }); });
 window.addEventListener('unhandledrejection', (e) => { const m = e.reason?.message || String(e.reason); toast(m, { tone: 'error', ms: 7000 }); });
 window.__nl = app; // for automated tests and diagnostics
+// Android Chrome offers one-tap install; keep the event so More → "Install as an app" can use it
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); app.installPrompt = e; if (window.__nlReady && app.profile) render(); });
+window.addEventListener('appinstalled', () => { app.installPrompt = null; toast('Installed. Open NutriLedger from your Home screen.'); });
 boot().then(() => { window.__nlReady = true; });
 export { localDate };

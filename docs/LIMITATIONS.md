@@ -12,3 +12,8 @@
 10. **Not medical advice.** Targets are for healthy adults. Kidney disease, diabetes, pregnancy etc. need a doctor's targets.
 11. **Right after an update**, the old version may show for up to 10 minutes because GitHub Pages lets browsers reuse pages. Reopen later.
 12. **Bookmark vs Home Screen:** a Safari bookmark works, but Safari may delete the site's data after 7 days of Safari use without opening it. The Home Screen app is exempt. Either way: back up.
+
+## Android (added 13 Nov 2026)
+- Tested in Chromium with an Android (Galaxy Z Fold 3) user agent at 280, 884 and 1104 px CSS widths. Not tested on a physical Samsung device.
+- Use Chrome. Samsung Internet stores site data separately from Chrome, so data entered in one is not visible in the other.
+- Chrome on Android cannot share .json files through the share sheet; "Export backup" saves the file to Downloads instead. Copy it to Google Drive for an off-phone copy.
