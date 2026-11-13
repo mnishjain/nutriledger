@@ -7,6 +7,7 @@ import { app, loadProfiles, loadPersonal, refresh } from './state.js';
 import { validateBackup } from '../store/validate.js';
 
 export const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+export const isAndroid = () => /Android/i.test(navigator.userAgent);
 export const isStandalone = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
 
 /**

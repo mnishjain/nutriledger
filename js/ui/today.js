@@ -7,6 +7,7 @@ import { NUTRIENTS, fmt, isNum } from '../core/nutrients.js';
 import { alertEl, confBadge, kcal, g1, valueWithCoverage, coverageNote } from './common.js';
 import { openAdd } from './add.js';
 import { describeAmount } from '../core/portions.js';
+import { openProfileSwitcher } from './more.js';
 
 const SLOT_VAR = { Breakfast: '--slot1', Lunch: '--slot2', Snacks: '--slot3', Dinner: '--slot4' };
 
@@ -25,7 +26,8 @@ export async function renderToday(root) {
       h('button.icon-btn', { type: 'button', 'aria-label': 'Previous day', onclick: () => { setDate(addDays(date, -1)); refresh('date'); } }, icon('back')),
       h('label.date-btn', {}, h('h1', { id: 'day-title' }, prettyDate(date, today)), dateInput),
       h('button.icon-btn', { type: 'button', 'aria-label': 'Next day', onclick: () => { setDate(addDays(date, 1)); refresh('date'); } }, icon('fwd'))),
-    h('button.avatar', { type: 'button', 'aria-label': `Profile ${app.profile.name}. Switch profile`, onclick: () => { app.tab = 'more'; refresh('tab'); } }, initials(app.profile.name))));
+    h('button.avatar', { type: 'button', id: 'profile-btn', 'aria-label': `Profile ${app.profile.name}. Switch profile`, onclick: () => openProfileSwitcher() }, initials(app.profile.name))));
+  if (app.profiles.length > 1) root.append(h('button.pill.profile-pill', { type: 'button', id: 'profile-pill', onclick: () => openProfileSwitcher() }, icon('user', 16), h('span', {}, `${app.profile.name}’s diary`), h('span.switch', {}, 'Switch')));
   if (date !== today) root.append(h('div', { style: { margin: '-4px 0 8px' } }, h('button.pill.warn', { type: 'button', id: 'back-to-today', onclick: () => { setDate(today); refresh('date'); } }, `Viewing ${prettyDate(date, today)} · back to today`)));
 
   // Ledger hero: calorie budget split by meal

@@ -419,6 +419,81 @@ test('security: food names with HTML are shown as text, never executed', async (
   await ctx.close();
 });
 
+test('profiles: switch from Today header (sheet) and by tapping a name in More; active name visible', async () => {
+  const { ctx, page } = await newCtx(); await open(page); await setupProfile(page, 'Manish');
+  eq(await page.locator('#profile-pill').count(), 0, 'no pill with one profile');
+  await page.click('#tab-more'); await page.click('#add-profile');
+  const s = page.locator('.sheet.open').last();
+  await s.getByLabel('Name', { exact: true }).fill('Asha'); await s.locator('.segmented button', { hasText: 'Female' }).click();
+  await s.getByLabel('Age (years)').fill('44'); await s.getByLabel('Height (cm)').fill('158'); await s.getByLabel('Weight (kg)').fill('60');
+  await s.locator('#profile-save').click(); await page.waitForTimeout(300);
+  await page.click('#tab-today');
+  assert((await page.textContent('#profile-pill')).includes('Asha'), 'pill names the active profile');
+  // Today header avatar → switcher sheet → tap Manish
+  await page.click('#profile-btn');
+  const sw = page.locator('#profile-switcher.open');
+  await sw.waitFor();
+  eq(await sw.locator('[aria-current="true"]').getAttribute('aria-label'), 'Asha, active profile', 'tick on active');
+  await sw.locator('[aria-label="Switch to Manish"]').click(); await page.waitForTimeout(400);
+  eq(await appEval(page, () => window.__nl.profile.name), 'Manish', 'switched via header');
+  eq(await page.locator('#profile-switcher.open').count(), 0, 'sheet closed');
+  assert((await page.textContent('#profile-pill')).includes('Manish'), 'pill updated');
+  // The pill also opens the switcher
+  await page.click('#profile-pill'); await page.locator('#profile-switcher.open').waitFor();
+  await page.locator('#profile-switcher.open [aria-label="Close"]').click(); await page.waitForTimeout(300);
+  // More: tapping the NAME of another profile switches (this was the reported problem)
+  await page.click('#tab-more');
+  await page.locator('#profiles .profile-pick', { hasText: 'Asha' }).click(); await page.waitForTimeout(400);
+  eq(await appEval(page, () => window.__nl.profile.name), 'Asha', 'tap name switches');
+  // Tapping the active name opens Edit; pencil edits too
+  await page.locator('#profiles .profile-pick', { hasText: 'Asha' }).click();
+  await page.locator('.sheet.open #profile-save').waitFor();
+  eq(await page.locator('.sheet.open').last().getByLabel('Name', { exact: true }).inputValue(), 'Asha', 'edit opens for active');
+  await page.locator('.sheet.open').last().locator('[aria-label="Close"]').click(); await page.waitForTimeout(300);
+  await page.locator('[aria-label="Edit Manish"]').click();
+  eq(await page.locator('.sheet.open').last().getByLabel('Name', { exact: true }).inputValue(), 'Manish', 'pencil edits Manish');
+  eq(await appEval(page, () => window.__nl.profile.name), 'Asha', 'editing does not switch');
+  eq(page.errors.length, 0, `page errors: ${page.errors.join(' | ')}`);
+  await ctx.close();
+});
+
+// Galaxy Z Fold 3 in Chrome for Android. CSS sizes are approximate: cover ~280 px wide, inner ~884 px (portrait) / ~1104 px (landscape).
+const FOLD_UA = 'Mozilla/5.0 (Linux; Android 14; SM-F926B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36';
+test('Android / Galaxy Fold: no iPhone banners, install prompt, backup downloads, layout at cover and inner widths', async () => {
+  const { ctx, page } = await newCtx({ ctx: { userAgent: FOLD_UA, viewport: { width: 884, height: 1104 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } });
+  await open(page); await setupProfile(page, 'Asha', { age: '44', height: '158', weight: '60' });
+  await addFood(page, 'banana');
+  eq(await page.locator('#safari-banner').count(), 0, 'no Safari banner on Android');
+  await page.waitForSelector('#android-banner');
+  // Simulate Chrome offering install
+  await page.evaluate(() => { const e = new Event('beforeinstallprompt', { cancelable: true }); e.prompt = async () => { window.__prompted = true; }; e.userChoice = Promise.resolve({ outcome: 'accepted' }); window.dispatchEvent(e); });
+  await page.waitForSelector('#banner-install');
+  await page.click('#tab-more'); await page.click('#install-app'); await page.waitForTimeout(300);
+  eq(await page.evaluate(() => window.__prompted), true, 'install prompt shown');
+  // Backup: Chrome cannot share .json files, so it downloads
+  await page.click('#open-backup');
+  assert((await page.locator('.sheet.open').last().textContent()).includes('Google Drive'), 'Android backup hint');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#export-backup')]);
+  assert(/NutriLedger-backup-\d{4}-\d\d-\d\d\.json/.test(dl.suggestedFilename()), 'backup file name');
+  const data = JSON.parse(fs.readFileSync(await dl.path(), 'utf8'));
+  eq(data.format, 'nutriledger-backup', 'valid backup'); eq(data.data.profiles.length, 1, 'one profile in backup');
+  await page.locator('.sheet.open').last().locator('[aria-label="Close"]').click(); await page.waitForTimeout(300);
+  for (const [w, hgt] of [[280, 653], [884, 1104], [1104, 884]]) {
+    await page.setViewportSize({ width: w, height: hgt });
+    for (const tab of ['today', 'add', 'meals', 'insights', 'more']) {
+      await page.click(`#tab-${tab}`); await page.waitForTimeout(250);
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      assert(over <= 0, `${tab} at ${w}px overflows by ${over}px`);
+      if (tab === 'add') await page.locator('.sheet.open').last().locator('[aria-label="Close"]').click().catch(() => {});
+      await page.waitForTimeout(150);
+    }
+    await page.click('#tab-today'); await page.waitForTimeout(200);
+    await page.screenshot({ path: path.join(OUT, `fold-${w}.png`) });
+  }
+  eq(page.errors.length, 0, `page errors: ${page.errors.join(' | ')}`);
+  await ctx.close();
+});
+
 test('mobile layout: no horizontal scrolling on any screen at 320 px and 390 px; screenshots', async () => {
   for (const width of [320, 390]) {
     const { ctx, page } = await newCtx({ ctx: { viewport: { width, height: 760 } } });

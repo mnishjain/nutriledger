@@ -7,7 +7,7 @@ import { localDate, prettyDate } from '../core/dates.js';
 import { NUTRIENTS, fmt, isNum } from '../core/nutrients.js';
 import { uid } from '../core/entries.js';
 import { SOURCES } from '../core/library.js';
-import { copyAllData, openBringData } from './transfer.js';
+import { copyAllData, openBringData, isIOS, isAndroid, isStandalone } from './transfer.js';
 import { testKey, cleanKey } from '../api/gemini.js';
 
 export async function renderMore(root) {
@@ -15,13 +15,12 @@ export async function renderMore(root) {
   const lastBackup = await app.store.meta('lastBackupAt', null);
   const counts = await app.store.counts();
   root.append(h('header.topbar', {}, h('h1', {}, 'More')));
-  root.append(h('div.section-title', {}, 'Profiles'), h('div.group', { id: 'profiles' },
-    app.profiles.map((p) => h('div.row', {},
-      h('button.avatar', { type: 'button', style: p.id === app.profile.id ? {} : { background: 'var(--fill)', color: 'var(--ink)' }, 'aria-label': `Switch to ${p.name}`, onclick: async () => { await switchProfile(p.id); toast(`Switched to ${p.name}`); refresh('profile'); } }, initials(p.name)),
-      h('button.main', { type: 'button', style: { border: 0, background: 'none', textAlign: 'left', padding: 0, color: 'inherit' }, onclick: () => editProfile(p) },
-        h('div.title', {}, p.name, p.id === app.profile.id ? ' (active)' : ''), h('div.sub', {}, `${p.sex}, ${p.age ?? '?'} y, ${p.weightKg ?? '?'} kg · ${GOALS[p.goal]?.label || ''}`)),
-      h('button.icon-btn', { type: 'button', 'aria-label': `Edit ${p.name}`, onclick: () => editProfile(p) }, icon('edit', 20)))),
-    h('button.row.add-row', { type: 'button', id: 'add-profile', onclick: () => editProfile(null) }, icon('plus', 20), 'Add a profile')));
+  root.append(h('div.section-title', {}, 'Profiles'), profileList({ inSheet: false }));
+  root.append(h('div.hint', { style: { margin: '6px 4px 0' } }, app.profiles.length > 1
+    ? 'Tap a name to switch. Tap ✎ to edit. Each person’s diary, meals and targets are kept separately.'
+    : 'Add a profile to track someone else on this phone. To track on their own phone, send them the link instead.'));
+  const installRow = installEntry();
+  if (installRow) root.append(h('div.section-title', {}, 'App'), h('div.group', {}, installRow));
 
   const T = app.targets;
   root.append(h('div.section-title', {}, `Daily targets for ${app.profile.name}`), h('div.card', { id: 'targets-card' },
@@ -41,6 +40,62 @@ export async function renderMore(root) {
     h('button.row', { type: 'button', onclick: () => exportCsv() }, icon('down'), h('div.main', {}, h('div.title', {}, 'Export diary as spreadsheet (CSV)'), h('div.sub', {}, `${counts.entries} entries`))),
     h('button.row', { type: 'button', onclick: () => openSources() }, icon('info'), h('div.main', {}, h('div.title', {}, 'Data sources & accuracy')))));
   root.append(h('p.hint', { style: { textAlign: 'center', margin: '20px 0' } }, `NutriLedger ${app.version}${app.isBeta ? ' (beta – test data only)' : ''} · works offline · no account, no ads, no tracking`));
+}
+
+const profileDesc = (p) => `${p.sex}, ${p.age ?? '?'} y, ${p.weightKg ?? '?'} kg · ${GOALS[p.goal]?.label || ''}`;
+
+async function useProfile(p, sheet = null) {
+  if (p.id !== app.profile.id) { await switchProfile(p.id); toast(`Now tracking ${p.name}`); }
+  sheet?.close();
+  refresh('profile');
+}
+
+/** Profile rows: tapping a name switches to it (the active one opens Edit); the pencil always edits. */
+function profileList({ inSheet, sheet = null }) {
+  return h('div.group', { id: inSheet ? 'switcher-list' : 'profiles' },
+    app.profiles.map((p) => {
+      const active = p.id === app.profile.id;
+      return h('div.row.profile-row', { class: active ? 'active' : '' },
+        h('button.profile-pick', { type: 'button', 'aria-label': active ? `${p.name}, active profile` : `Switch to ${p.name}`, 'aria-current': active ? 'true' : null,
+          onclick: () => (active && !inSheet ? editProfile(p) : useProfile(p, sheet)) },
+          h('span.avatar', { class: active ? '' : 'off', 'aria-hidden': 'true' }, initials(p.name)),
+          h('span.main', {}, h('div.title', {}, p.name), h('div.sub', {}, active ? `Active · ${profileDesc(p)}` : profileDesc(p))),
+          active ? h('span.tick', { 'aria-hidden': 'true' }, icon('check', 20)) : null),
+        h('button.icon-btn', { type: 'button', 'aria-label': `Edit ${p.name}`, onclick: () => { sheet?.close(); editProfile(p); } }, icon('edit', 20)));
+    }),
+    h('button.row.add-row', { type: 'button', id: inSheet ? 'switcher-add' : 'add-profile', onclick: () => { sheet?.close(); editProfile(null); } }, icon('plus', 20), 'Add a profile'));
+}
+
+/** Opened from the round initials button on Today: whose diary is shown, and switch in one tap. */
+export function openProfileSwitcher() {
+  const sheet = openSheet({ title: 'Whose diary?' });
+  sheet.el.id = 'profile-switcher';
+  sheet.body.append(profileList({ inSheet: true, sheet }),
+    h('p.hint', {}, 'Each profile has its own diary, meals and targets. Food library and saved foods are shared on this phone.'));
+  return sheet;
+}
+
+/** Android/Chrome: one-tap install when Chrome offers it; otherwise short menu steps. iPhone has its own banner. */
+export function installEntry() {
+  if (isStandalone() || isIOS()) return null;
+  const prompt = app.installPrompt;
+  if (!prompt && !isAndroid()) return null;
+  return h('button.row', { type: 'button', id: 'install-app', onclick: async () => {
+    if (app.installPrompt) {
+      const ev = app.installPrompt; app.installPrompt = null;
+      try { await ev.prompt(); const c = await ev.userChoice; toast(c?.outcome === 'accepted' ? 'Installing – open NutriLedger from your Home screen' : 'Not installed'); } catch { toast('Use Chrome menu ⋮ → Add to Home screen'); }
+      refresh('tab');
+    } else openInstallHelp();
+  } }, icon('down'), h('div.main', {}, h('div.title', {}, 'Install as an app'), h('div.sub', {}, 'Own icon, full screen, works offline. Your data stays.')));
+}
+
+function openInstallHelp() {
+  const s = openSheet({ title: 'Install on Android' });
+  s.body.append(h('ol.steps', {},
+    h('li', {}, 'Use ', h('b', {}, 'Chrome'), ' (not Samsung Internet: it keeps separate data).'),
+    h('li', {}, 'Tap the menu ', h('b', {}, '⋮'), ' (top right).'),
+    h('li', {}, 'Tap ', h('b', {}, 'Add to Home screen'), ' (or ', h('b', {}, 'Install app'), ') → ', h('b', {}, 'Install'), '.'),
+    h('li', {}, 'Open NutriLedger from the new icon. On Android it uses the same data as Chrome, so nothing needs copying.')));
 }
 
 /** Create or edit a profile. Also used for first-run setup. */
@@ -146,7 +201,7 @@ export async function exportBackup() {
   const data = await app.store.exportAll();
   const name = `NutriLedger-backup-${localDate()}.json`;
   const r = await shareFile(JSON.stringify(data), name, 'application/json');
-  if (r !== 'cancelled') { await app.store.setMeta('lastBackupAt', Date.now()); toast(r === 'shared' ? 'Backup shared – save it to Files / iCloud Drive' : 'Backup downloaded'); }
+  if (r !== 'cancelled') { await app.store.setMeta('lastBackupAt', Date.now()); toast(r === 'shared' ? (isIOS() ? 'Backup shared – save it to Files / iCloud Drive' : 'Backup shared') : 'Backup saved to Downloads'); }
   return r;
 }
 
@@ -158,16 +213,20 @@ async function openBackup() {
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
   const snaps = await app.store.listSnapshots();
   b.append(h('div.card', {}, h('h3', {}, 'Where your data lives'),
-    h('p.small', {}, 'Everything is stored only on this phone, inside ', standalone ? 'the Home Screen app.' : 'this Safari tab.', ' The Home Screen app and Safari keep separate data. Deleting the app or clearing website data deletes it. There is no automatic cloud copy.'),
+    h('p.small', {}, isIOS()
+      ? ['Everything is stored only on this phone, inside ', standalone ? 'the Home Screen app.' : 'this Safari tab.', ' The Home Screen app and Safari keep separate data. Deleting the app or clearing website data deletes it. There is no automatic cloud copy.']
+      : ['Everything is stored only on this device, in this browser', isAndroid() ? ' (on Android the installed app and Chrome share it)' : '', '. Clearing the browser’s site data or uninstalling deletes it. There is no automatic cloud copy.']),
     h('table.kv', {}, h('tr', {}, h('td', {}, 'Protected from automatic clean-up'), h('td', {}, persist === 'granted' ? 'Yes' : persist === 'denied' ? 'Not granted' : 'Not supported')),
       est ? h('tr', {}, h('td', {}, 'Storage used'), h('td', {}, `${(est.usage / 1048576).toFixed(1)} MB`)) : null)),
     h('button.btn.primary.block', { type: 'button', id: 'export-backup', onclick: async () => { await exportBackup(); } }, icon('share', 18), 'Export backup'),
-    h('div.hint', {}, 'Choose “Save to Files” → iCloud Drive. Do this weekly; the app reminds you.'),
+    h('div.hint', {}, isIOS() ? 'Choose “Save to Files” → iCloud Drive. Do this weekly; the app reminds you.'
+      : 'The file is saved to Downloads (or choose where to save). Copy it to Google Drive for safety. Do this weekly; the app reminds you.'),
     h('div.section-title', {}, 'Move to the Home Screen app or another phone'),
     h('div.btn-row', {},
       h('button.btn', { type: 'button', id: 'copy-data', onclick: () => copyAllData() }, icon('copy', 18), 'Copy my data'),
       h('button.btn', { type: 'button', id: 'paste-data', onclick: () => { sheet.close(); openBringData({ emptyApp: false }); } }, 'Paste my data')),
-    h('div.hint', {}, 'On iPhone, Safari and the Home Screen app keep separate data. Copy in one, then Paste in the other.'),
+    h('div.hint', {}, isIOS() ? 'On iPhone, Safari and the Home Screen app keep separate data. Copy in one, then Paste in the other.'
+      : 'To move to another phone: Copy here, send the text to yourself, then Paste on the other phone. A backup file works too.'),
     h('div.section-title', {}, 'Restore from a backup file'));
   const file = h('input', { type: 'file', accept: 'application/json,.json', id: 'restore-file' });
   const out = h('div');

@@ -116,3 +116,4 @@ Run: 2026-10-25T15:25:07.759Z · Commit: rebuild-v3 (see git log)
 | 12 | API failure / offline | search-label-off.test; e2e offline, Open Food Facts |
 | 13 | Mobile viewport/usability | e2e mobile layout (320/390 px, tap targets), date control |
 | 14 | Regressions | e2e D1–D4, D6; storage duplicate-ID repair |
+- 2026-11-13: 97 unit + 40 browser tests pass (adds profile switching and Android/Galaxy Fold widths 280/884/1104 px).

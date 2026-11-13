@@ -41,3 +41,9 @@ node tools/make-beta.mjs <main-checkout>   # write <main-checkout>/beta/
 1. Change code on a branch; run `node tools/build-shell.mjs`; run both test suites.
 2. Publish to `/beta/` on `main` with `tools/make-beta.mjs`; test on the iPhone (docs/IPHONE_ACCEPTANCE.md).
 3. With owner approval, copy the branch's site files to the `main` root and delete `/beta/`.
+
+## Using it on Android (e.g. Samsung Galaxy)
+1. Open https://mnishjain.github.io/nutriledger/ in **Chrome**.
+2. Tap "I'm new" and set up your profile.
+3. Chrome menu ⋮ → "Add to Home screen" / "Install app" (or More → "Install as an app"). The app and Chrome share the same data on Android.
+4. Weekly: More → Backup & restore → Export backup (saved to Downloads) → copy it to Google Drive.
